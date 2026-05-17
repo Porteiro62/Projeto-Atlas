@@ -26,6 +26,11 @@ export interface ElectronAPI {
   // Updates actions
   startDownloadUpdate: () => void;
   installUpdateNow: () => void;
+
+  // Safe Storage
+  safeStorageEncrypt: (plainText: string) => Promise<string>;
+  safeStorageDecrypt: (base64Text: string) => Promise<string>;
+  safeStorageIsAvailable: () => Promise<boolean>;
 }
 
 declare global {

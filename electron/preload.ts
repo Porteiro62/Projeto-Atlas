@@ -39,5 +39,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Updates actions
   startDownloadUpdate: () => ipcRenderer.send('start-download-update'),
-  installUpdateNow: () => ipcRenderer.send('install-update-now')
+  installUpdateNow: () => ipcRenderer.send('install-update-now'),
+
+  // Safe Storage
+  safeStorageEncrypt: (plainText: string) => ipcRenderer.invoke('safe-storage-encrypt', plainText),
+  safeStorageDecrypt: (base64Text: string) => ipcRenderer.invoke('safe-storage-decrypt', base64Text),
+  safeStorageIsAvailable: () => ipcRenderer.invoke('safe-storage-is-available')
 });

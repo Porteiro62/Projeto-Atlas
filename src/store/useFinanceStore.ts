@@ -32,15 +32,15 @@ export interface UserProfile {
   name: string;
   username: string;
   photoUrl: string | null;
-  pin?: string;
 }
 
 interface FinanceState {
   transactions: Transaction[];
   summary: Summary;
   financingMeta: FinancingMeta;
-  user: UserProfile;
+  user: UserProfile | null;
   isAuthenticated: boolean;
+  authStatus: 'loading' | 'unregistered' | 'locked' | 'authenticated';
   selectedMonth: number;
   selectedYear: number;
   loading: boolean;
@@ -53,8 +53,11 @@ interface FinanceState {
   deleteAllTransactions: (type?: Transaction['type']) => Promise<void>;
   updateFinancingMeta: (meta: FinancingMeta) => void;
   updateUser: (user: Partial<UserProfile>) => void;
-  login: (username: string, pin: string) => boolean;
-  register: (userData: UserProfile) => void;
+  checkAuthStatus: () => Promise<void>;
+  registerUser: (name: string, username: string, pin: string) => Promise<boolean>;
+  loginUser: (pin: string) => Promise<boolean>;
+  loginWithWindowsHello: () => Promise<boolean>;
+  lockApp: () => Promise<void>;
   logout: () => void;
   setDate: (month: number, year: number) => void;
 }
@@ -63,13 +66,9 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   transactions: [],
   summary: { income: 0, expense: 0, balance: 0 },
   financingMeta: { target: 0, initialValue: 0, monthlyInstallment: 0 },
-  user: {
-    name: 'padrao',
-    username: '',
-    photoUrl: null,
-    pin: '1234',
-  },
+  user: null,
   isAuthenticated: false,
+  authStatus: 'loading',
   selectedMonth: new Date().getMonth(),
   selectedYear: new Date().getFullYear(),
   loading: false,
@@ -151,24 +150,187 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   updateFinancingMeta: (meta) => set({ financingMeta: meta }),
 
   updateUser: (userData) => set((state) => ({
-    user: { ...state.user, ...userData }
+    user: state.user ? { ...state.user, ...userData } : null
   })),
 
-  login: (username, pin) => {
-    const { user } = get();
-    if ((user.username === username || username === '') && user.pin === pin) {
-      set({ isAuthenticated: true });
-      return true;
+  checkAuthStatus: async () => {
+    set({ authStatus: 'loading' });
+    try {
+      const res = await fetch('/api/auth/status');
+      const data = await res.json();
+      if (data.registered) {
+        set({ authStatus: 'locked' });
+      } else {
+        set({ authStatus: 'unregistered' });
+      }
+    } catch (e) {
+      console.error("[Zustand] checkAuthStatus failed:", e);
+      set({ authStatus: 'unregistered' });
     }
-    return false;
   },
 
-  register: (userData) => set({
-    user: userData,
-    isAuthenticated: true
-  }),
+  registerUser: async (name, username, pin) => {
+    try {
+      // 1. Generate a local master key (32 bytes, hex)
+      const rawMasterBytes = new Uint8Array(32);
+      window.crypto.getRandomValues(rawMasterBytes);
+      const masterKeyRaw = Array.from(rawMasterBytes)
+        .map(b => b.toString(16).padStart(2, '0')).join('');
 
-  logout: () => set({ isAuthenticated: false }),
+      // 2. Encrypt the master key using Windows Hello safeStorage DPAPI
+      let masterKeyEncrypted = masterKeyRaw;
+      if (window.electronAPI && await window.electronAPI.safeStorageIsAvailable()) {
+        masterKeyEncrypted = await window.electronAPI.safeStorageEncrypt(masterKeyRaw);
+      }
+
+      // 3. Register user on the backend
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          username,
+          pin,
+          masterKeyEncrypted,
+          masterKeyRaw
+        })
+      });
+
+      if (res.ok) {
+        set({
+          user: { name, username, photoUrl: null },
+          authStatus: 'authenticated',
+          isAuthenticated: true
+        });
+        
+        // Fetch fresh decrypted data
+        await get().fetchTransactions();
+        await get().fetchSummary();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("[Zustand] registerUser failed:", err);
+      return false;
+    }
+  },
+
+  loginUser: async (pin) => {
+    try {
+      // 1. Check PIN at backend
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin })
+      });
+
+      if (!res.ok) return false;
+      const data = await res.json();
+
+      // 2. Decrypt the master key in the frontend using safeStorage DPAPI
+      let masterKeyHex = data.masterKeyEncrypted;
+      if (window.electronAPI && await window.electronAPI.safeStorageIsAvailable()) {
+        masterKeyHex = await window.electronAPI.safeStorageDecrypt(data.masterKeyEncrypted);
+      }
+
+      // 3. Unlock SQLite database
+      const unlockRes = await fetch('/api/auth/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ masterKey: masterKeyHex })
+      });
+
+      if (unlockRes.ok) {
+        set({
+          user: { name: data.name, username: data.username, photoUrl: null },
+          authStatus: 'authenticated',
+          isAuthenticated: true
+        });
+        
+        // Fetch fresh database transactions and summary
+        await get().fetchTransactions();
+        await get().fetchSummary();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("[Zustand] loginUser failed:", err);
+      return false;
+    }
+  },
+
+  loginWithWindowsHello: async () => {
+    try {
+      // 1. Fetch status to check if registered and get the encrypted master key
+      const statusRes = await fetch('/api/auth/status');
+      const statusData = await statusRes.json();
+      if (!statusData.registered) return false;
+
+      // 2. Trigger Windows Hello biometric dialog using WebAuthn API!
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
+      
+      const credential = await navigator.credentials.get({
+        publicKey: {
+          challenge,
+          rpId: window.location.hostname, // Must match domain (usually localhost)
+          userVerification: "required"
+        }
+      });
+      
+      if (!credential) {
+        throw new Error("Windows Hello rejected by user.");
+      }
+
+      // 3. Decrypt the master key in the frontend using safeStorage DPAPI
+      let masterKeyHex = statusData.masterKeyEncrypted;
+      if (window.electronAPI && await window.electronAPI.safeStorageIsAvailable()) {
+        masterKeyHex = await window.electronAPI.safeStorageDecrypt(statusData.masterKeyEncrypted);
+      }
+
+      // 4. Unlock SQLite database
+      const unlockRes = await fetch('/api/auth/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ masterKey: masterKeyHex })
+      });
+
+      if (unlockRes.ok) {
+        const unlockData = await unlockRes.json();
+        set({
+          user: { name: unlockData.name, username: unlockData.username, photoUrl: null },
+          authStatus: 'authenticated',
+          isAuthenticated: true
+        });
+        
+        // Fetch fresh database transactions and summary
+        await get().fetchTransactions();
+        await get().fetchSummary();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("[Zustand] loginWithWindowsHello failed:", err);
+      return false;
+    }
+  },
+
+  lockApp: async () => {
+    try {
+      await fetch('/api/auth/lock', { method: 'POST' });
+    } catch (e) {}
+    set({
+      user: null,
+      authStatus: 'locked',
+      isAuthenticated: false,
+      transactions: [],
+      summary: { income: 0, expense: 0, balance: 0 }
+    });
+  },
+
+  logout: () => {
+    get().lockApp();
+  },
 
   setDate: (month, year) => set({ selectedMonth: month, selectedYear: year }),
 }));

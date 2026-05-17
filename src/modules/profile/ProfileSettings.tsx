@@ -10,9 +10,9 @@ interface ProfileSettingsProps {
 export function ProfileSettings({ onClose }: ProfileSettingsProps) {
   const { user, updateUser, logout } = useFinanceStore();
   const [formData, setFormData] = useState({
-    name: user.name,
-    username: user.username,
-    photoUrl: user.photoUrl || '',
+    name: user?.name || '',
+    username: user?.username || '',
+    photoUrl: user?.photoUrl || '',
     password: '',
     confirmPassword: '',
   });

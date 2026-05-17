@@ -8,7 +8,7 @@
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild electron/main.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist-electron/main.cjs && esbuild electron/preload.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist-electron/preload.cjs",
     "start": "node dist/server.cjs",
-    "electron:dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:dev": "npm run build && electron .",
     "electron:build": "npm run build && electron-builder",
     "clean": "rm -rf dist dist-electron server.js local.db",
     "lint": "tsc --noEmit"
@@ -17,6 +17,10 @@
     "appId": "com.atlas.fintech",
     "productName": "Atlas Fintech",
     "npmRebuild": true,
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**/*"
+    ],
     "directories": {
       "output": "release"
     },
@@ -31,7 +35,8 @@
     },
     "win": {
       "target": "nsis",
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "verifyUpdateCodeSignature": false
     },
     "publish": {
       "provider": "github",
@@ -62,6 +67,7 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",

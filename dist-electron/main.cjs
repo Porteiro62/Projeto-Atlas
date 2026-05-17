@@ -120,10 +120,6 @@ var mainWindow = null;
 var serverProcess = null;
 var updateManager = null;
 function startServer() {
-  if (!import_electron2.app.isPackaged) {
-    console.log("Running in dev mode: Skipping built-in server startup as it should be running via npm run dev");
-    return;
-  }
   const baseDir = process.platform === "win32" ? process.env.APPDATA || import_path.default.join(import_os.default.homedir(), "AppData", "Roaming") : process.platform === "darwin" ? import_path.default.join(import_os.default.homedir(), "Library", "Application Support") : process.env.XDG_CONFIG_HOME || import_path.default.join(import_os.default.homedir(), ".config");
   const atlasDir = import_path.default.join(baseDir, "Atlas");
   if (!import_fs.default.existsSync(atlasDir)) {
@@ -144,24 +140,29 @@ function startServer() {
 `);
   try {
     serverProcess = (0, import_child_process.fork)(serverPath, [], {
-      env: { ...process.env, NODE_ENV: "production" },
+      env: { ...process.env, NODE_ENV: import_electron2.app.isPackaged ? "production" : "development" },
       stdio: ["ignore", "pipe", "pipe", "ipc"]
     });
     serverProcess.stdout?.on("data", (data) => {
+      console.log(`[Server STDOUT] ${data.toString().trim()}`);
       logStream.write(`[STDOUT] ${data.toString()}`);
     });
     serverProcess.stderr?.on("data", (data) => {
+      console.error(`[Server STDERR] ${data.toString().trim()}`);
       logStream.write(`[STDERR] ${data.toString()}`);
     });
     serverProcess.on("error", (err) => {
+      console.error(`[Server ERROR] Fork error: ${err.message}`);
       logStream.write(`[ERROR] Fork error: ${err.message}
 `);
     });
     serverProcess.on("exit", (code, signal) => {
+      console.log(`[Server EXIT] Process exited with code ${code} and signal ${signal}`);
       logStream.write(`[EXIT] Process exited with code ${code} and signal ${signal}
 `);
     });
   } catch (err) {
+    console.error(`[Server FATAL] Catch error trying to fork: ${err.message}`);
     logStream.write(`[FATAL] Catch error trying to fork: ${err.message}
 `);
   }
@@ -226,6 +227,23 @@ import_electron2.ipcMain.on("window-maximize", () => {
 });
 import_electron2.ipcMain.on("window-close", () => {
   mainWindow?.close();
+});
+import_electron2.ipcMain.handle("safe-storage-encrypt", (event, plainText) => {
+  if (!import_electron2.safeStorage.isEncryptionAvailable()) {
+    throw new Error("Encryption is not available on this platform.");
+  }
+  const buffer = import_electron2.safeStorage.encryptString(plainText);
+  return buffer.toString("base64");
+});
+import_electron2.ipcMain.handle("safe-storage-decrypt", (event, base64Text) => {
+  if (!import_electron2.safeStorage.isEncryptionAvailable()) {
+    throw new Error("Encryption is not available on this platform.");
+  }
+  const buffer = Buffer.from(base64Text, "base64");
+  return import_electron2.safeStorage.decryptString(buffer);
+});
+import_electron2.ipcMain.handle("safe-storage-is-available", () => {
+  return import_electron2.safeStorage.isEncryptionAvailable();
 });
 import_electron2.app.whenReady().then(() => {
   startServer();

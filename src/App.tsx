@@ -22,7 +22,42 @@ export default function App() {
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const { user, isAuthenticated } = useFinanceStore();
+  const { user, isAuthenticated, checkAuthStatus, lockApp } = useFinanceStore();
+
+  // Run initial authentication status check
+  useEffect(() => {
+    checkAuthStatus();
+  }, [checkAuthStatus]);
+
+  // Handle auto-lock on user inactivity (15 minutes)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+    let timeoutId: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        console.log("[App] User inactive. Locking app automatically.");
+        lockApp();
+      }, INACTIVITY_TIMEOUT);
+    };
+
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
+    activityEvents.forEach(event => {
+      window.addEventListener(event, resetTimer);
+    });
+
+    resetTimer();
+
+    return () => {
+      clearTimeout(timeoutId);
+      activityEvents.forEach(event => {
+        window.removeEventListener(event, resetTimer);
+      });
+    };
+  }, [isAuthenticated, lockApp]);
 
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -88,15 +123,15 @@ export default function App() {
               className="flex items-center gap-2 hover:bg-stone-100 p-1 rounded-full transition-colors pr-3"
             >
                 <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-emerald-500/10 overflow-hidden">
-                  {user.photoUrl ? (
+                  {user?.photoUrl ? (
                     <img src={user.photoUrl} alt={user.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   ) : (
-                    user.name.charAt(0).toUpperCase()
+                    user?.name ? user.name.charAt(0).toUpperCase() : 'U'
                   )}
                 </div>
                 <div className="flex flex-col items-start leading-none">
-                  <span className="text-sm font-semibold text-stone-700">{user.name}</span>
-                  <span className="text-[9px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">@{user.username}</span>
+                  <span className="text-sm font-semibold text-stone-700">{user?.name}</span>
+                  <span className="text-[9px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">@{user?.username}</span>
                 </div>
              </button>
           </div>

@@ -49,5 +49,9 @@ import_electron.contextBridge.exposeInMainWorld("electronAPI", {
   },
   // Updates actions
   startDownloadUpdate: () => import_electron.ipcRenderer.send("start-download-update"),
-  installUpdateNow: () => import_electron.ipcRenderer.send("install-update-now")
+  installUpdateNow: () => import_electron.ipcRenderer.send("install-update-now"),
+  // Safe Storage
+  safeStorageEncrypt: (plainText) => import_electron.ipcRenderer.invoke("safe-storage-encrypt", plainText),
+  safeStorageDecrypt: (base64Text) => import_electron.ipcRenderer.invoke("safe-storage-decrypt", base64Text),
+  safeStorageIsAvailable: () => import_electron.ipcRenderer.invoke("safe-storage-is-available")
 });

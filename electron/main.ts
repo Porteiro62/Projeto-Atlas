@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
 import path from 'path';
 import { fork, ChildProcess } from 'child_process';
 import { UpdateManager } from './updateManager';
@@ -10,12 +10,6 @@ let serverProcess: ChildProcess | null = null;
 let updateManager: UpdateManager | null = null;
 
 function startServer() {
-  // In dev, the server is started separately by concurrently ('npm run dev')
-  if (!app.isPackaged) {
-    console.log('Running in dev mode: Skipping built-in server startup as it should be running via npm run dev');
-    return;
-  }
-
   // Determine the persistent logs path
   const baseDir = process.platform === 'win32'
     ? (process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'))
@@ -41,26 +35,31 @@ function startServer() {
 
   try {
     serverProcess = fork(serverPath, [], {
-      env: { ...process.env, NODE_ENV: 'production' },
+      env: { ...process.env, NODE_ENV: app.isPackaged ? 'production' : 'development' },
       stdio: ['ignore', 'pipe', 'pipe', 'ipc']
     });
 
     serverProcess.stdout?.on('data', (data) => {
+      console.log(`[Server STDOUT] ${data.toString().trim()}`);
       logStream.write(`[STDOUT] ${data.toString()}`);
     });
 
     serverProcess.stderr?.on('data', (data) => {
+      console.error(`[Server STDERR] ${data.toString().trim()}`);
       logStream.write(`[STDERR] ${data.toString()}`);
     });
 
     serverProcess.on('error', (err) => {
+      console.error(`[Server ERROR] Fork error: ${err.message}`);
       logStream.write(`[ERROR] Fork error: ${err.message}\n`);
     });
 
     serverProcess.on('exit', (code, signal) => {
+      console.log(`[Server EXIT] Process exited with code ${code} and signal ${signal}`);
       logStream.write(`[EXIT] Process exited with code ${code} and signal ${signal}\n`);
     });
   } catch (err: any) {
+    console.error(`[Server FATAL] Catch error trying to fork: ${err.message}`);
     logStream.write(`[FATAL] Catch error trying to fork: ${err.message}\n`);
   }
 }
@@ -138,6 +137,27 @@ ipcMain.on('window-maximize', () => {
 
 ipcMain.on('window-close', () => {
   mainWindow?.close();
+});
+
+// Safe Storage IPC Handlers using Windows DPAPI via safeStorage
+ipcMain.handle('safe-storage-encrypt', (event, plainText: string) => {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Encryption is not available on this platform.');
+  }
+  const buffer = safeStorage.encryptString(plainText);
+  return buffer.toString('base64');
+});
+
+ipcMain.handle('safe-storage-decrypt', (event, base64Text: string) => {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Encryption is not available on this platform.');
+  }
+  const buffer = Buffer.from(base64Text, 'base64');
+  return safeStorage.decryptString(buffer);
+});
+
+ipcMain.handle('safe-storage-is-available', () => {
+  return safeStorage.isEncryptionAvailable();
 });
 
 app.whenReady().then(() => {
