@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { db } from "./src/database/db.ts";
 import { transactions, creditCards, financings } from "./src/database/schema.ts";
 import { eq, desc, sql } from "drizzle-orm";
@@ -142,6 +141,7 @@ async function startServer() {
     // Vite middleware for development
     if (process.env.NODE_ENV !== "production") {
       console.log("Initializing Vite middleware...");
+      const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: "spa",
@@ -149,7 +149,7 @@ async function startServer() {
       app.use(vite.middlewares);
       console.log("Vite middleware initialized.");
     } else {
-      const distPath = path.join(process.cwd(), 'dist');
+      const distPath = __dirname;
       app.use(express.static(distPath));
       app.get('*', (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));

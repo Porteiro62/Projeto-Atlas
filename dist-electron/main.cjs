@@ -22,27 +22,152 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // electron/main.ts
-var import_electron = require("electron");
+var import_electron2 = require("electron");
 var import_path = __toESM(require("path"), 1);
 var import_child_process = require("child_process");
+
+// electron/updateManager.ts
+var import_electron_updater = require("electron-updater");
+var import_electron = require("electron");
+var UpdateManager = class {
+  constructor(window) {
+    this.mainWindow = window;
+    this.setupListeners();
+  }
+  setupListeners() {
+    import_electron_updater.autoUpdater.autoInstallOnAppQuit = false;
+    import_electron_updater.autoUpdater.autoDownload = true;
+    import_electron_updater.autoUpdater.on("checking-for-update", () => {
+      console.log("[UpdateManager] Checking for updates...");
+      this.sendToRenderer("checking-for-update");
+    });
+    import_electron_updater.autoUpdater.on("update-available", (info) => {
+      console.log("[UpdateManager] New update available:", info.version);
+      let releaseNotes = "";
+      if (info.releaseNotes) {
+        if (typeof info.releaseNotes === "string") {
+          releaseNotes = info.releaseNotes;
+        } else if (Array.isArray(info.releaseNotes)) {
+          releaseNotes = info.releaseNotes.map((note) => {
+            if (typeof note === "string") return note;
+            return note.note || JSON.stringify(note);
+          }).join("\n");
+        } else {
+          releaseNotes = JSON.stringify(info.releaseNotes);
+        }
+      }
+      this.sendToRenderer("update-available", {
+        version: info.version,
+        releaseNotes: releaseNotes || "Nenhuma nota de vers\xE3o fornecida."
+      });
+    });
+    import_electron_updater.autoUpdater.on("update-not-available", () => {
+      console.log("[UpdateManager] Application is up-to-date.");
+      this.sendToRenderer("update-not-available");
+    });
+    import_electron_updater.autoUpdater.on("download-progress", (progressObj) => {
+      this.sendToRenderer("download-progress", {
+        percent: progressObj.percent,
+        bytesPerSecond: progressObj.bytesPerSecond,
+        total: progressObj.total,
+        transferred: progressObj.transferred
+      });
+    });
+    import_electron_updater.autoUpdater.on("update-downloaded", (info) => {
+      console.log("[UpdateManager] Update successfully downloaded:", info.version);
+      this.sendToRenderer("update-downloaded", {
+        version: info.version
+      });
+    });
+    import_electron_updater.autoUpdater.on("error", (err) => {
+      console.error("[UpdateManager] Error during update sequence:", err);
+      this.sendToRenderer("update-error", {
+        error: err.message || "Erro inesperado ao verificar/baixar atualiza\xE7\xF5es."
+      });
+    });
+    import_electron.ipcMain.on("start-download-update", () => {
+      console.log("[UpdateManager] Manual trigger download-update requested");
+      import_electron_updater.autoUpdater.downloadUpdate().catch((err) => {
+        console.error("[UpdateManager] Manual download trigger failed:", err);
+      });
+    });
+    import_electron.ipcMain.on("install-update-now", () => {
+      console.log("[UpdateManager] Installer restart confirmed. Executing quitAndInstall...");
+      try {
+        import_electron_updater.autoUpdater.quitAndInstall();
+      } catch (err) {
+        console.error("[UpdateManager] quitAndInstall invocation failed:", err);
+      }
+    });
+  }
+  checkForUpdates() {
+    console.log("[UpdateManager] Initiating updates check...");
+    import_electron_updater.autoUpdater.checkForUpdates().catch((err) => {
+      console.log("[UpdateManager] Safe updates check bypassed (likely offline):", err.message || err);
+    });
+  }
+  sendToRenderer(channel, data) {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send(channel, data);
+    }
+  }
+};
+
+// electron/main.ts
+var import_fs = __toESM(require("fs"), 1);
+var import_os = __toESM(require("os"), 1);
 var mainWindow = null;
 var serverProcess = null;
+var updateManager = null;
 function startServer() {
-  if (!import_electron.app.isPackaged) {
+  if (!import_electron2.app.isPackaged) {
     console.log("Running in dev mode: Skipping built-in server startup as it should be running via npm run dev");
     return;
   }
-  const serverPath = import_path.default.join(process.resourcesPath, "dist/server.cjs");
-  serverProcess = (0, import_child_process.fork)(serverPath, [], {
-    env: { ...process.env, NODE_ENV: "production" },
-    stdio: "inherit"
-  });
-  serverProcess.on("error", (err) => {
-    console.error("Failed to start server:", err);
-  });
+  const baseDir = process.platform === "win32" ? process.env.APPDATA || import_path.default.join(import_os.default.homedir(), "AppData", "Roaming") : process.platform === "darwin" ? import_path.default.join(import_os.default.homedir(), "Library", "Application Support") : process.env.XDG_CONFIG_HOME || import_path.default.join(import_os.default.homedir(), ".config");
+  const atlasDir = import_path.default.join(baseDir, "Atlas");
+  if (!import_fs.default.existsSync(atlasDir)) {
+    try {
+      import_fs.default.mkdirSync(atlasDir, { recursive: true });
+    } catch (e) {
+    }
+  }
+  const logFilePath = import_path.default.join(atlasDir, "server-log.txt");
+  const logStream = import_fs.default.createWriteStream(logFilePath, { flags: "a" });
+  logStream.write(`
+--- Starting Server at ${(/* @__PURE__ */ new Date()).toISOString()} ---
+`);
+  logStream.write(`App Path: ${import_electron2.app.getAppPath()}
+`);
+  const serverPath = import_path.default.join(import_electron2.app.getAppPath(), "dist/server.cjs");
+  logStream.write(`Server Path: ${serverPath}
+`);
+  try {
+    serverProcess = (0, import_child_process.fork)(serverPath, [], {
+      env: { ...process.env, NODE_ENV: "production" },
+      stdio: ["ignore", "pipe", "pipe", "ipc"]
+    });
+    serverProcess.stdout?.on("data", (data) => {
+      logStream.write(`[STDOUT] ${data.toString()}`);
+    });
+    serverProcess.stderr?.on("data", (data) => {
+      logStream.write(`[STDERR] ${data.toString()}`);
+    });
+    serverProcess.on("error", (err) => {
+      logStream.write(`[ERROR] Fork error: ${err.message}
+`);
+    });
+    serverProcess.on("exit", (code, signal) => {
+      logStream.write(`[EXIT] Process exited with code ${code} and signal ${signal}
+`);
+    });
+  } catch (err) {
+    logStream.write(`[FATAL] Catch error trying to fork: ${err.message}
+`);
+  }
 }
 function createWindow() {
-  mainWindow = new import_electron.BrowserWindow({
+  mainWindow = new import_electron2.BrowserWindow({
     width: 1280,
     height: 800,
     titleBarStyle: "hidden",
@@ -62,7 +187,15 @@ function createWindow() {
     // Assume an icon exists
   });
   const url = "http://localhost:3000";
-  if (!import_electron.app.isPackaged) {
+  mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL) => {
+    if (validatedURL.startsWith(url)) {
+      console.log(`[Electron] Failed to load server URL (${errorCode}: ${errorDescription}). Retrying in 500ms...`);
+      setTimeout(() => {
+        mainWindow?.loadURL(url);
+      }, 500);
+    }
+  });
+  if (!import_electron2.app.isPackaged) {
     setTimeout(() => {
       mainWindow?.loadURL(url);
     }, 3e3);
@@ -72,20 +205,41 @@ function createWindow() {
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
-}
-import_electron.app.whenReady().then(() => {
-  startServer();
-  createWindow();
-  import_electron.app.on("activate", () => {
-    if (import_electron.BrowserWindow.getAllWindows().length === 0) createWindow();
+  updateManager = new UpdateManager(mainWindow);
+  mainWindow.webContents.once("did-finish-load", () => {
+    setTimeout(() => {
+      updateManager?.checkForUpdates();
+    }, 4e3);
   });
+}
+import_electron2.ipcMain.on("window-minimize", () => {
+  mainWindow?.minimize();
 });
-import_electron.app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    import_electron.app.quit();
+import_electron2.ipcMain.on("window-maximize", () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
   }
 });
-import_electron.app.on("before-quit", () => {
+import_electron2.ipcMain.on("window-close", () => {
+  mainWindow?.close();
+});
+import_electron2.app.whenReady().then(() => {
+  startServer();
+  createWindow();
+  import_electron2.app.on("activate", () => {
+    if (import_electron2.BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
+import_electron2.app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    import_electron2.app.quit();
+  }
+});
+import_electron2.app.on("before-quit", () => {
   if (serverProcess) {
     serverProcess.kill();
   }

@@ -9,7 +9,7 @@ export function LockScreen() {
   const [pin, setPin] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
-  
+
   const { login, register, user } = useFinanceStore();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -43,7 +43,7 @@ export function LockScreen() {
   return (
     <div className="fixed inset-0 bg-atlas-dark flex overflow-hidden">
       {/* Esquerda: Área de Login/Cadastro */}
-      <motion.div 
+      <motion.div
         initial={{ x: -100, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         className="w-full lg:w-[450px] bg-white h-full shadow-2xl z-10 flex flex-col justify-center px-12 relative"
@@ -61,16 +61,16 @@ export function LockScreen() {
               {isRegistering ? 'Criar Conta' : 'Bem-vindo'}
             </h1>
             <p className="text-stone-400 font-medium">
-              {isRegistering 
-                ? 'Comece a gerir suas finanças de forma inteligente.' 
-                : 'Insira suas credenciais para acessar o painel.'}
+              {isRegistering
+                ? ''
+                : ''}
             </p>
           </header>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <AnimatePresence mode="wait">
               {isRegistering && (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
@@ -79,8 +79,8 @@ export function LockScreen() {
                   <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-2">
                     <User size={12} /> Nome Completo
                   </label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -95,8 +95,8 @@ export function LockScreen() {
               <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-2">
                 <User size={12} /> Nome de Usuário
               </label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -112,8 +112,8 @@ export function LockScreen() {
                 </label>
                 <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">4 DÍGITOS</span>
               </div>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 required
                 maxLength={4}
                 value={pin}
@@ -124,7 +124,7 @@ export function LockScreen() {
             </div>
 
             {error && (
-              <motion.p 
+              <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className="text-[10px] text-rose-500 font-bold uppercase tracking-widest text-center"
@@ -133,34 +133,31 @@ export function LockScreen() {
               </motion.p>
             )}
 
-            <button 
+            <button
               type="submit"
               className="w-full bg-atlas-dark hover:bg-atlas-teal text-white py-5 rounded-2xl font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-3 transition-all shadow-xl shadow-black/10 active:scale-95 group mb-4"
             >
-              {isRegistering ? 'Finalizar Cadastro' : 'Desbloquear Painel'}
+              {isRegistering ? 'Finalizar Cadastro' : 'Entrar'}
               <ArrowRight size={18} className="text-atlas-emerald group-hover:translate-x-1 transition-transform" />
             </button>
           </form>
 
           <div className="mt-8 text-center">
-            <button 
+            <button
               onClick={() => setIsRegistering(!isRegistering)}
               className="text-[10px] text-stone-400 hover:text-atlas-emerald font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-2 mx-auto"
             >
               {isRegistering ? (
                 <>Já possui uma conta? <span className="text-atlas-dark">Entrar</span></>
               ) : (
-                <>Não tem conta? <span className="text-atlas-dark">Cadastrar agora</span></>
+                <>Não tem conta? <span className="text-atlas-dark"></span></>
               )}
             </button>
           </div>
         </div>
 
         <footer className="absolute bottom-12 left-12 right-12 flex justify-between items-center text-[10px] text-stone-300 font-bold uppercase tracking-widest">
-          <span>&copy; Atlas Fintech</span>
-          <span className="flex items-center gap-1">
-            <Lock size={12} className="text-atlas-emerald" /> 256-bit Encrypted
-          </span>
+          <span>&copy; Atlas - by porteiro62</span>
         </footer>
       </motion.div>
 
@@ -170,9 +167,9 @@ export function LockScreen() {
           <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_30%_20%,#26D0A8_0%,transparent_50%)]"></div>
           <div className="absolute bottom-0 right-0 w-full h-full bg-[radial-gradient(circle_at_70%_80%,#0F3D3E_0%,transparent_50%)]"></div>
         </div>
-        
+
         <div className="relative z-10 text-center">
-          <motion.div 
+          <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 1 }}
@@ -184,7 +181,7 @@ export function LockScreen() {
               <div className="w-8 h-8 bg-atlas-emerald rounded-sm rotate-45 shadow-[0_0_20px_rgba(38,208,168,0.5)]"></div>
             </div>
           </motion.div>
-          <h2 className="text-5xl font-black text-white tracking-tighter mb-4">FINANÇAS EM<br/><span className="text-atlas-emerald">EQUILÍBRIO.</span></h2>
+          <h2 className="text-5xl font-black text-white tracking-tighter mb-4">FINANÇAS EM<br /><span className="text-atlas-emerald">EQUILÍBRIO.</span></h2>
           <p className="text-atlas-cream/40 font-bold uppercase tracking-[0.3em] text-xs">Sistema de Gestão Patrimonial Offline</p>
         </div>
 

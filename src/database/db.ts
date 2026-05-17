@@ -1,43 +1,60 @@
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import Database from 'better-sqlite3';
 import * as schema from './schema.ts';
+import { runMigrations } from './migrations.ts';
+import path from 'path';
+import fs from 'fs';
+import os from 'os';
 
-const sqlite = new Database('local.db');
+// Determine the persistent, cross-platform database path
+export function getDatabasePath(): string {
+  let baseDir: string;
+  
+  if (process.platform === 'win32') {
+    // e.g. C:\Users\<Username>\AppData\Roaming
+    baseDir = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+  } else if (process.platform === 'darwin') {
+    // e.g. /Users/<Username>/Library/Application Support
+    baseDir = path.join(os.homedir(), 'Library', 'Application Support');
+  } else {
+    // Linux / Unix: e.g. /home/<Username>/.config
+    baseDir = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+  }
+
+  const atlasDir = path.join(baseDir, 'Atlas');
+  
+  if (!fs.existsSync(atlasDir)) {
+    try {
+      fs.mkdirSync(atlasDir, { recursive: true });
+    } catch (err) {
+      console.error(`[Database] Failed to create directory: ${atlasDir}`, err);
+    }
+  }
+
+  return path.join(atlasDir, 'local.db');
+}
+
+// Migrate existing legacy database if present
+const appDbPath = getDatabasePath();
+const legacyDbPath = path.join(process.cwd(), 'local.db');
+
+if (fs.existsSync(legacyDbPath) && !fs.existsSync(appDbPath)) {
+  try {
+    fs.copyFileSync(legacyDbPath, appDbPath);
+    console.log(`[Database] Migrated legacy database from ${legacyDbPath} to ${appDbPath}`);
+  } catch (err) {
+    console.error(`[Database] Failed to migrate database:`, err);
+  }
+}
+
+console.log(`[Database] Connecting to database at: ${appDbPath}`);
+const sqlite = new Database(appDbPath);
+
+// Run migrations on startup
+try {
+  runMigrations(sqlite);
+} catch (migrationError) {
+  console.error('[Database] Failed to run schema migrations:', migrationError);
+}
+
 export const db = drizzle(sqlite, { schema });
-
-// Auto-migrate (simple way for this applet)
-sqlite.exec(`
-  CREATE TABLE IF NOT EXISTS transactions (
-    id TEXT PRIMARY KEY,
-    type TEXT NOT NULL,
-    description TEXT NOT NULL,
-    category TEXT NOT NULL,
-    value REAL NOT NULL,
-    date TEXT NOT NULL,
-    recurrence TEXT DEFAULT 'none',
-    status TEXT DEFAULT 'pending',
-    observations TEXT,
-    card_id TEXT,
-    financing_id TEXT,
-    installment_number INTEGER,
-    total_installments INTEGER
-  );
-
-  CREATE TABLE IF NOT EXISTS credit_cards (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    limit_amount REAL NOT NULL,
-    closing_day INTEGER NOT NULL,
-    due_day INTEGER NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS financings (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    total_value REAL NOT NULL,
-    annual_interest_rate REAL NOT NULL,
-    total_installments INTEGER NOT NULL,
-    start_date TEXT NOT NULL,
-    monthly_payment REAL NOT NULL
-  );
-`);

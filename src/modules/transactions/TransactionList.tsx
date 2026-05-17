@@ -65,9 +65,9 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
     return transactions
       .filter(t => {
         const date = parseISO(t.date);
-        return t.type === 'credit_card' && 
-               date.getMonth() === selectedMonth && 
-               date.getFullYear() === selectedYear;
+        return t.type === 'credit_card' &&
+          date.getMonth() === selectedMonth &&
+          date.getFullYear() === selectedYear;
       })
       .reduce((sum, t) => sum + t.value, 0);
   }, [transactions, selectedMonth, selectedYear]);
@@ -76,7 +76,7 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
     const date = parseISO(t.date);
     const matchesMonth = date.getMonth() === selectedMonth && date.getFullYear() === selectedYear;
     const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         t.category.toLowerCase().includes(searchTerm.toLowerCase());
+      t.category.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = filterType ? t.type === filterType : true;
     return matchesMonth && matchesSearch && matchesType;
   });
@@ -146,11 +146,11 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
           <h2 className="text-2xl font-bold text-stone-900 tracking-tight">{getTitle()}</h2>
           <p className="text-stone-500 text-sm">Controle sua timeline financeira.</p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           {/* Month Slider */}
           <div className="flex items-center bg-white border border-stone-200 rounded-xl px-2 py-1 shadow-sm mr-2">
-            <button 
+            <button
               onClick={() => changeMonth(-1)}
               className="p-1 text-stone-400 hover:text-stone-900 transition-colors"
             >
@@ -159,28 +159,28 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
             <span className="px-4 text-xs font-bold uppercase tracking-widest text-stone-700 min-w-[140px] text-center">
               {currentMonthName}
             </span>
-            <button 
+            <button
               onClick={() => changeMonth(1)}
               className="p-1 text-stone-400 hover:text-stone-900 transition-colors"
             >
               <ChevronRight size={20} />
             </button>
           </div>
-          <button 
+          <button
             onClick={handleDeleteAll}
             className="flex items-center gap-2 bg-white hover:bg-rose-50 text-rose-500 px-4 py-2 rounded-lg transition-colors border border-rose-100 shadow-sm font-semibold text-sm"
           >
             <Trash2 size={18} />
             Limpar Tudo
           </button>
-          <button 
+          <button
             onClick={handleExportCSV}
             className="flex items-center gap-2 bg-white hover:bg-stone-50 text-stone-700 px-4 py-2 rounded-lg transition-colors border border-stone-200 shadow-sm font-semibold text-sm"
           >
             <Download size={18} />
             Exportar CSV
           </button>
-          <button 
+          <button
             onClick={() => setIsFormOpen(true)}
             className="flex items-center gap-2 bg-atlas-dark hover:bg-atlas-teal text-white px-4 py-2 rounded-lg transition-all shadow-lg shadow-black/20 border border-atlas-emerald/20 font-bold text-xs uppercase tracking-widest"
           >
@@ -191,7 +191,7 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
       </header>
 
       {isFormOpen && <TransactionForm onClose={handleCloseForm} initialType={filterType} initialData={editingTransaction || undefined} />}
-      
+
       {filterType === 'credit_card' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-atlas-dark p-8 rounded-3xl border border-atlas-teal/20 shadow-xl flex flex-col justify-center">
@@ -207,8 +207,6 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
               </div>
             </div>
             <div className="pt-4 border-t border-white/5 flex justify-between items-center">
-              <span className="text-xs font-mono text-stone-400 tracking-widest">VISA PLATINUM •••• 4590</span>
-              <div className="px-2 py-1 bg-atlas-emerald/10 rounded text-[10px] font-bold text-atlas-emerald uppercase">Fechamento: 05/{String(selectedMonth + 1).padStart(2, '0')}</div>
             </div>
           </div>
 
@@ -218,8 +216,8 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
                 <MoreHorizontal size={24} />
               </div>
               <div>
-                 <h4 className="font-bold text-stone-900">Limite Utilizado</h4>
-                 <p className="text-xs text-stone-400">Referente a {currentMonthName}</p>
+                <h4 className="font-bold text-stone-900">Limite Utilizado</h4>
+                <p className="text-xs text-stone-400">Referente a {currentMonthName}</p>
               </div>
             </div>
             <div className="space-y-2">
@@ -228,18 +226,17 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
                 <span className="font-bold text-stone-900">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditCardTotal)}</span>
               </div>
               <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
-                <div 
-                  className="bg-amber-500 h-full transition-all duration-500" 
+                <div
+                  className="bg-amber-500 h-full transition-all duration-500"
                   style={{ width: `${Math.min((creditCardTotal / 5000) * 100, 100)}%` }}
                 ></div>
               </div>
-              <p className="text-[10px] text-stone-400 text-right font-bold uppercase tracking-widest">Limite total: R$ 5.000,00</p>
             </div>
           </div>
         </div>
       )}
       {confirmConfig && (
-        <ConfirmDialog 
+        <ConfirmDialog
           isOpen={confirmConfig.isOpen}
           onClose={() => setConfirmConfig(null)}
           onConfirm={confirmConfig.onConfirm}
@@ -252,7 +249,7 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
         <div className="p-4 border-b border-stone-100 flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="relative w-full md:w-96">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
-            <input 
+            <input
               type="text"
               placeholder="Buscar por descrição ou categoria..."
               className="w-full bg-stone-50 border border-stone-200 rounded-xl py-2 pl-10 pr-4 text-sm text-stone-900 focus:outline-none focus:ring-1 focus:ring-atlas-emerald shadow-inner"
@@ -260,7 +257,7 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          
+
           <div className="flex items-center gap-2">
             <button className="p-2 text-stone-400 hover:text-stone-900 hover:bg-stone-50 rounded-lg transition-colors border border-stone-100">
               <Filter size={18} />
@@ -317,14 +314,14 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
                     <td className="px-6 py-4 text-center">
                       {tx.id !== 'virtual-cc-fatura' ? (
                         <div className="flex items-center justify-center gap-2">
-                          <button 
+                          <button
                             onClick={() => handleEdit(tx)}
                             className="p-1.5 text-stone-300 hover:text-atlas-teal hover:bg-stone-100 rounded-lg transition-all"
                             title="Editar"
                           >
                             <Edit2 size={16} />
                           </button>
-                          <button 
+                          <button
                             onClick={() => handleDelete(tx.id)}
                             className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                             title="Excluir"

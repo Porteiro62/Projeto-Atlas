@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "main": "dist-electron/main.cjs",
   "scripts": {
@@ -16,7 +16,7 @@
   "build": {
     "appId": "com.atlas.fintech",
     "productName": "Atlas Fintech",
-    "npmRebuild": false,
+    "npmRebuild": true,
     "directories": {
       "output": "release"
     },
@@ -26,10 +26,17 @@
       "public/**/*"
     ],
     "mac": {
-      "category": "public.app-category.finance"
+      "category": "public.app-category.finance",
+      "icon": "build/icon.icns"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Porteiro62",
+      "repo": "Projeto-Atlas"
     }
   },
   "dependencies": {
@@ -40,6 +47,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.2",
+    "electron-updater": "^6.8.3",
     "express": "^4.21.2",
     "framer-motion": "^12.38.0",
     "lucide-react": "^0.546.0",
@@ -61,7 +69,7 @@
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.2.1",
     "drizzle-kit": "^0.18.1",
-    "electron": "^42.1.0",
+    "electron": "^41.0.0",
     "electron-builder": "^26.8.1",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",

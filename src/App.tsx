@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TitleBar } from './components/TitleBar';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './modules/dashboard/Dashboard';
@@ -15,12 +15,32 @@ import { useFinanceStore } from './store/useFinanceStore';
 import { ProfileSettings } from './modules/profile/ProfileSettings';
 import { LockScreen } from './modules/auth/LockScreen';
 import { SplashScreen } from './modules/auth/SplashScreen';
+import { UpdateModal } from './components/UpdateModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const { user, isAuthenticated } = useFinanceStore();
+
+  useEffect(() => {
+    if (!window.electronAPI) return;
+
+    // Listen to update availability to show premium update modal
+    const unsubscribeAvailable = window.electronAPI.onUpdateAvailable(() => {
+      setShowUpdateModal(true);
+    });
+
+    const unsubscribeDownloaded = window.electronAPI.onUpdateDownloaded(() => {
+      setShowUpdateModal(true);
+    });
+
+    return () => {
+      unsubscribeAvailable();
+      unsubscribeDownloaded();
+    };
+  }, []);
 
   if (isInitializing) {
     return <SplashScreen onFinish={() => setIsInitializing(false)} />;
@@ -91,6 +111,7 @@ export default function App() {
 
         </div>
       {isProfileSettingsOpen && <ProfileSettings onClose={() => setIsProfileSettingsOpen(false)} />}
+      {showUpdateModal && <UpdateModal onClose={() => setShowUpdateModal(false)} />}
     </div>
   );
 }
