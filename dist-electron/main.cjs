@@ -23,12 +23,61 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 
 // electron/main.ts
 var import_electron2 = require("electron");
-var import_path = __toESM(require("path"), 1);
+var import_path2 = __toESM(require("path"), 1);
 var import_child_process = require("child_process");
 
 // electron/updateManager.ts
 var import_electron_updater = require("electron-updater");
 var import_electron = require("electron");
+var import_fs = __toESM(require("fs"), 1);
+var import_path = __toESM(require("path"), 1);
+var import_os = __toESM(require("os"), 1);
+var getAtlasDir = () => {
+  let baseDir;
+  if (process.platform === "win32") {
+    baseDir = process.env.APPDATA || import_path.default.join(import_os.default.homedir(), "AppData", "Roaming");
+  } else if (process.platform === "darwin") {
+    baseDir = import_path.default.join(import_os.default.homedir(), "Library", "Application Support");
+  } else {
+    baseDir = process.env.XDG_CONFIG_HOME || import_path.default.join(import_os.default.homedir(), ".config");
+  }
+  const atlasDir = import_path.default.join(baseDir, "Atlas");
+  if (!import_fs.default.existsSync(atlasDir)) {
+    try {
+      import_fs.default.mkdirSync(atlasDir, { recursive: true });
+    } catch (e) {
+    }
+  }
+  return atlasDir;
+};
+var updaterLogPath = import_path.default.join(getAtlasDir(), "updater-log.txt");
+var customLogger = {
+  info(message) {
+    try {
+      const msg = typeof message === "string" ? message : JSON.stringify(message);
+      import_fs.default.appendFileSync(updaterLogPath, `[INFO] ${(/* @__PURE__ */ new Date()).toISOString()} - ${msg}
+`);
+    } catch (e) {
+    }
+  },
+  warn(message) {
+    try {
+      const msg = typeof message === "string" ? message : JSON.stringify(message);
+      import_fs.default.appendFileSync(updaterLogPath, `[WARN] ${(/* @__PURE__ */ new Date()).toISOString()} - ${msg}
+`);
+    } catch (e) {
+    }
+  },
+  error(message) {
+    try {
+      const msg = typeof message === "string" ? message : JSON.stringify(message);
+      import_fs.default.appendFileSync(updaterLogPath, `[ERROR] ${(/* @__PURE__ */ new Date()).toISOString()} - ${msg}
+`);
+    } catch (e) {
+    }
+  }
+};
+import_electron_updater.autoUpdater.logger = customLogger;
 var UpdateManager = class {
   constructor(window) {
     this.mainWindow = window;
@@ -114,28 +163,28 @@ var UpdateManager = class {
 };
 
 // electron/main.ts
-var import_fs = __toESM(require("fs"), 1);
-var import_os = __toESM(require("os"), 1);
+var import_fs2 = __toESM(require("fs"), 1);
+var import_os2 = __toESM(require("os"), 1);
 var mainWindow = null;
 var serverProcess = null;
 var updateManager = null;
 function startServer() {
-  const baseDir = process.platform === "win32" ? process.env.APPDATA || import_path.default.join(import_os.default.homedir(), "AppData", "Roaming") : process.platform === "darwin" ? import_path.default.join(import_os.default.homedir(), "Library", "Application Support") : process.env.XDG_CONFIG_HOME || import_path.default.join(import_os.default.homedir(), ".config");
-  const atlasDir = import_path.default.join(baseDir, "Atlas");
-  if (!import_fs.default.existsSync(atlasDir)) {
+  const baseDir = process.platform === "win32" ? process.env.APPDATA || import_path2.default.join(import_os2.default.homedir(), "AppData", "Roaming") : process.platform === "darwin" ? import_path2.default.join(import_os2.default.homedir(), "Library", "Application Support") : process.env.XDG_CONFIG_HOME || import_path2.default.join(import_os2.default.homedir(), ".config");
+  const atlasDir = import_path2.default.join(baseDir, "Atlas");
+  if (!import_fs2.default.existsSync(atlasDir)) {
     try {
-      import_fs.default.mkdirSync(atlasDir, { recursive: true });
+      import_fs2.default.mkdirSync(atlasDir, { recursive: true });
     } catch (e) {
     }
   }
-  const logFilePath = import_path.default.join(atlasDir, "server-log.txt");
-  const logStream = import_fs.default.createWriteStream(logFilePath, { flags: "a" });
+  const logFilePath = import_path2.default.join(atlasDir, "server-log.txt");
+  const logStream = import_fs2.default.createWriteStream(logFilePath, { flags: "a" });
   logStream.write(`
 --- Starting Server at ${(/* @__PURE__ */ new Date()).toISOString()} ---
 `);
   logStream.write(`App Path: ${import_electron2.app.getAppPath()}
 `);
-  const serverPath = import_path.default.join(import_electron2.app.getAppPath(), "dist/server.cjs");
+  const serverPath = import_path2.default.join(import_electron2.app.getAppPath(), "dist/server.cjs");
   logStream.write(`Server Path: ${serverPath}
 `);
   try {
@@ -182,9 +231,9 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: import_path.default.join(__dirname, "preload.cjs")
+      preload: import_path2.default.join(__dirname, "preload.cjs")
     },
-    icon: import_path.default.join(__dirname, "../public/icon.png")
+    icon: import_path2.default.join(__dirname, "../public/icon.png")
     // Assume an icon exists
   });
   const url = "http://localhost:3000";

@@ -10,7 +10,7 @@ import { Dashboard } from './modules/dashboard/Dashboard';
 import { TransactionList } from './modules/transactions/TransactionList';
 import { CreditCardModule } from './modules/credit-card/CreditCard';
 import { FinancingModule } from './modules/financing/Financing';
-import { Settings, Search, User } from 'lucide-react';
+import { Settings, Search, User, Bell } from 'lucide-react';
 import { useFinanceStore } from './store/useFinanceStore';
 import { ProfileSettings } from './modules/profile/ProfileSettings';
 import { LockScreen } from './modules/auth/LockScreen';
@@ -22,6 +22,7 @@ export default function App() {
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const { user, isAuthenticated, checkAuthStatus, lockApp } = useFinanceStore();
 
   // Run initial authentication status check
@@ -64,10 +65,12 @@ export default function App() {
 
     // Listen to update availability to show premium update modal
     const unsubscribeAvailable = window.electronAPI.onUpdateAvailable(() => {
+      setUpdateAvailable(true);
       setShowUpdateModal(true);
     });
 
     const unsubscribeDownloaded = window.electronAPI.onUpdateDownloaded(() => {
+      setUpdateAvailable(true);
       setShowUpdateModal(true);
     });
 
@@ -118,6 +121,50 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
+             {/* Notification Bell / Update Trigger */}
+             <div className="relative group">
+               <button
+                 onClick={() => {
+                   if (updateAvailable) {
+                     setShowUpdateModal(true);
+                   }
+                 }}
+                 className={`relative p-2.5 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 transition-all shadow-sm flex items-center justify-center cursor-pointer ${
+                   updateAvailable 
+                     ? 'border-emerald-200 text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50/20' 
+                     : 'text-stone-500 hover:text-stone-700'
+                 }`}
+               >
+                 <Bell size={18} className={updateAvailable ? 'animate-bounce' : ''} />
+                 
+                 {/* Glowing pulse badge if update is ready */}
+                 {updateAvailable ? (
+                   <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                   </span>
+                 ) : (
+                   /* Subtle silent dot for active status */
+                   <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-stone-300"></span>
+                 )}
+               </button>
+
+               {/* Premium Hover Tooltip */}
+               <div className="absolute right-0 top-full mt-2 w-56 scale-95 opacity-0 pointer-events-none group-hover:scale-100 group-hover:opacity-100 transition-all duration-200 z-50 origin-top-right">
+                 <div className="rounded-xl border border-stone-800 bg-stone-900 px-3.5 py-2.5 shadow-xl text-stone-100 text-xs">
+                   <div className="flex items-center gap-2 font-semibold">
+                     <span className={`h-1.5 w-1.5 rounded-full ${updateAvailable ? 'bg-emerald-400 animate-pulse' : 'bg-emerald-500'}`}></span>
+                     <span>{updateAvailable ? 'Atualização Disponível!' : 'Sistema Atualizado'}</span>
+                   </div>
+                   <p className="mt-1 text-[10px] text-stone-400 leading-normal">
+                     {updateAvailable 
+                       ? 'Uma nova versão do Atlas está pronta. Clique no sino para instalar!' 
+                       : 'Você está rodando a versão estável mais recente (v1.1.0).'}
+                   </p>
+                 </div>
+               </div>
+             </div>
+
              <button 
               onClick={() => setIsProfileSettingsOpen(true)}
               className="flex items-center gap-2 hover:bg-stone-100 p-1 rounded-full transition-colors pr-3"

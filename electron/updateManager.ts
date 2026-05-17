@@ -1,5 +1,52 @@
 import { autoUpdater } from 'electron-updater';
 import { BrowserWindow, ipcMain } from 'electron';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+
+// Configure a custom robust diagnostic file logger for the Auto-Updater
+const getAtlasDir = () => {
+  let baseDir: string;
+  if (process.platform === 'win32') {
+    baseDir = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+  } else if (process.platform === 'darwin') {
+    baseDir = path.join(os.homedir(), 'Library', 'Application Support');
+  } else {
+    baseDir = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+  }
+  const atlasDir = path.join(baseDir, 'Atlas');
+  if (!fs.existsSync(atlasDir)) {
+    try {
+      fs.mkdirSync(atlasDir, { recursive: true });
+    } catch (e) {}
+  }
+  return atlasDir;
+};
+
+const updaterLogPath = path.join(getAtlasDir(), 'updater-log.txt');
+
+const customLogger = {
+  info(message: any) {
+    try {
+      const msg = typeof message === 'string' ? message : JSON.stringify(message);
+      fs.appendFileSync(updaterLogPath, `[INFO] ${new Date().toISOString()} - ${msg}\n`);
+    } catch (e) {}
+  },
+  warn(message: any) {
+    try {
+      const msg = typeof message === 'string' ? message : JSON.stringify(message);
+      fs.appendFileSync(updaterLogPath, `[WARN] ${new Date().toISOString()} - ${msg}\n`);
+    } catch (e) {}
+  },
+  error(message: any) {
+    try {
+      const msg = typeof message === 'string' ? message : JSON.stringify(message);
+      fs.appendFileSync(updaterLogPath, `[ERROR] ${new Date().toISOString()} - ${msg}\n`);
+    } catch (e) {}
+  }
+};
+
+autoUpdater.logger = customLogger;
 
 export class UpdateManager {
   private mainWindow: BrowserWindow;
