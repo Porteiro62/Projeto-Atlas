@@ -45,6 +45,23 @@ export const migrations: Migration[] = [
           start_date TEXT NOT NULL,
           monthly_payment REAL NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
+      `);
+    }
+  },
+  {
+    id: 2,
+    name: '0002_app_settings_table',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
       `);
     }
   }

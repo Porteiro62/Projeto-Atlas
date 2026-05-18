@@ -24,11 +24,17 @@ export default function App() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
   const [availableVersion, setAvailableVersion] = useState<string | null>(null);
-  const { user, isAuthenticated, checkAuthStatus, lockApp } = useFinanceStore();
+  const { user, isAuthenticated, checkAuthStatus, fetchFinancingMeta, fetchUserProfile, lockApp } = useFinanceStore();
 
   useEffect(() => {
     checkAuthStatus();
   }, [checkAuthStatus]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetchFinancingMeta();
+    fetchUserProfile();
+  }, [isAuthenticated, fetchFinancingMeta, fetchUserProfile]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -121,7 +127,13 @@ export default function App() {
     <div className="flex flex-col h-screen overflow-hidden bg-stone-50 text-stone-900">
       <TitleBar />
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} appVersion={currentVersion} />
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          appVersion={currentVersion}
+          user={user}
+          onProfileClick={() => setIsProfileSettingsOpen(true)}
+        />
 
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <header className="h-20 bg-stone-50/80 backdrop-blur-md sticky top-0 z-40 flex items-center justify-between px-8 border-b border-stone-200 shadow-sm">
@@ -177,22 +189,6 @@ export default function App() {
                 </div>
               </div>
 
-              <button
-                onClick={() => setIsProfileSettingsOpen(true)}
-                className="flex items-center gap-2 hover:bg-stone-100 p-1 rounded-full transition-colors pr-3"
-              >
-                <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-emerald-500/10 overflow-hidden">
-                  {user?.photoUrl ? (
-                    <img src={user.photoUrl} alt={user.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    user?.name ? user.name.charAt(0).toUpperCase() : 'U'
-                  )}
-                </div>
-                <div className="flex flex-col items-start leading-none">
-                  <span className="text-sm font-semibold text-stone-700">{user?.name}</span>
-                  <span className="text-[9px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">@{user?.username}</span>
-                </div>
-              </button>
             </div>
           </header>
 

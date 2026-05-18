@@ -62,6 +62,7 @@ export interface AuthConfig {
   pinHash: string;
   salt: string;
   masterKeyEncrypted: string;
+  photoUrl?: string | null;
   webauthnCredential?: StoredWebAuthnCredential;
 }
 

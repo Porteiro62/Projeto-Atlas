@@ -6,9 +6,10 @@ import { ptBR } from 'date-fns/locale';
 import { Search, Filter, MoreHorizontal, Download, Trash2, Plus, ChevronLeft, ChevronRight, Edit2, CreditCard } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { exportFinanceReportPdf } from '../../utils/report';
 
 export function TransactionList({ filterType }: { filterType?: Transaction['type'] }) {
-  const { transactions, fetchTransactions, loading, selectedMonth, selectedYear, setDate, deleteTransaction, deleteAllTransactions } = useFinanceStore();
+  const { transactions, financingMeta, fetchTransactions, loading, selectedMonth, selectedYear, setDate, deleteTransaction, deleteAllTransactions } = useFinanceStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -98,33 +99,14 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
     return list;
   }, [filteredTransactions, filterType, creditCardTotal, searchTerm, selectedMonth, selectedYear]);
 
-  const handleExportCSV = () => {
-    if (displayTransactions.length === 0) return;
-
-    const headers = ['Data', 'Descricao', 'Categoria', 'Valor', 'Tipo', 'Status'];
-    const rows = displayTransactions.map(tx => [
-      format(parseISO(tx.date), 'dd/MM/yyyy'),
-      tx.description,
-      tx.category,
-      tx.value.toFixed(2),
-      tx.type,
-      tx.status
-    ]);
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `transacoes_${format(new Date(), 'yyyy-MM-dd')}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleExportPdf = () => {
+    exportFinanceReportPdf({
+      title: `Relatorio completo - ${getTitle()}`,
+      transactions,
+      financingMeta,
+      selectedMonth,
+      selectedYear,
+    });
   };
 
   const getTitle = () => {
@@ -174,11 +156,11 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
             Limpar Tudo
           </button>
           <button
-            onClick={handleExportCSV}
+            onClick={handleExportPdf}
             className="flex items-center gap-2 bg-white hover:bg-stone-50 text-stone-700 px-4 py-2 rounded-lg transition-colors border border-stone-200 shadow-sm font-semibold text-sm"
           >
             <Download size={18} />
-            Exportar CSV
+            Emitir PDF
           </button>
           <button
             onClick={() => setIsFormOpen(true)}

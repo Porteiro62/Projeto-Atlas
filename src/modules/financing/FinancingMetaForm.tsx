@@ -8,14 +8,12 @@ export function FinancingMetaForm({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<FinancingMeta>(financingMeta);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    updateFinancingMeta(formData);
-    setTimeout(() => {
-      setLoading(false);
-      onClose();
-    }, 500);
+    await updateFinancingMeta(formData);
+    setLoading(false);
+    onClose();
   };
 
   return (

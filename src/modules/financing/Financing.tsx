@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useFinanceStore, Transaction } from '../../store/useFinanceStore';
 import { Home, Target, TrendingUp, Calendar, Plus, ChevronRight, PieChart, Activity, ChevronLeft, Edit2, Trash2 } from 'lucide-react';
 import { TransactionForm } from '../transactions/TransactionForm';
@@ -9,11 +9,16 @@ import { ptBR } from 'date-fns/locale';
 import { clsx } from 'clsx';
 
 export function FinancingModule() {
-  const { transactions, financingMeta, selectedMonth, selectedYear, setDate, deleteTransaction, deleteAllTransactions } = useFinanceStore();
+  const { transactions, financingMeta, selectedMonth, selectedYear, setDate, fetchTransactions, fetchFinancingMeta, deleteTransaction, deleteAllTransactions } = useFinanceStore();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isMetaFormOpen, setIsMetaFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [confirmConfig, setConfirmConfig] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void } | null>(null);
+
+  useEffect(() => {
+    fetchTransactions();
+    fetchFinancingMeta();
+  }, []);
 
   const handleEdit = (tx: Transaction) => {
     setEditingTransaction(tx);
@@ -113,7 +118,7 @@ export function FinancingModule() {
             onClick={() => setIsMetaFormOpen(true)}
             className="flex items-center gap-2 bg-white hover:bg-stone-50 text-stone-700 px-6 py-2.5 rounded-xl transition-all border border-stone-200 shadow-sm font-bold text-sm h-[42px]"
           >
-            Configurar Meta
+            Gerenciar Metas
           </button>
           <button 
             onClick={() => setIsFormOpen(true)}

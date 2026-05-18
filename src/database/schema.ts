@@ -35,3 +35,8 @@ export const financings = sqliteTable('financings', {
   startDate: text('start_date').notNull(),
   monthlyPayment: real('monthly_payment').notNull(),
 });
+
+export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+});

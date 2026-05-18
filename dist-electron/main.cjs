@@ -27,7 +27,6 @@ var import_path2 = __toESM(require("path"), 1);
 var import_child_process = require("child_process");
 
 // electron/updateManager.ts
-var import_electron_updater = require("electron-updater");
 var import_electron = require("electron");
 var import_fs = __toESM(require("fs"), 1);
 var import_path = __toESM(require("path"), 1);
@@ -77,20 +76,37 @@ var customLogger = {
     }
   }
 };
-import_electron_updater.autoUpdater.logger = customLogger;
 var UpdateManager = class {
   constructor(window) {
+    this.autoUpdater = null;
     this.mainWindow = window;
+    this.autoUpdater = this.createAutoUpdater();
     this.setupListeners();
   }
+  createAutoUpdater() {
+    if (!import_electron.app.isPackaged) {
+      return null;
+    }
+    try {
+      const { autoUpdater } = require("electron-updater");
+      autoUpdater.logger = customLogger;
+      return autoUpdater;
+    } catch (error) {
+      console.error("[UpdateManager] Failed to initialize autoUpdater:", error);
+      return null;
+    }
+  }
   setupListeners() {
-    import_electron_updater.autoUpdater.autoInstallOnAppQuit = false;
-    import_electron_updater.autoUpdater.autoDownload = true;
-    import_electron_updater.autoUpdater.on("checking-for-update", () => {
+    if (!this.autoUpdater) {
+      return;
+    }
+    this.autoUpdater.autoInstallOnAppQuit = false;
+    this.autoUpdater.autoDownload = true;
+    this.autoUpdater.on("checking-for-update", () => {
       console.log("[UpdateManager] Checking for updates...");
       this.sendToRenderer("checking-for-update");
     });
-    import_electron_updater.autoUpdater.on("update-available", (info) => {
+    this.autoUpdater.on("update-available", (info) => {
       console.log("[UpdateManager] New update available:", info.version);
       let releaseNotes = "";
       if (info.releaseNotes) {
@@ -110,11 +126,11 @@ var UpdateManager = class {
         releaseNotes: releaseNotes || "Nenhuma nota de vers\xE3o fornecida."
       });
     });
-    import_electron_updater.autoUpdater.on("update-not-available", () => {
+    this.autoUpdater.on("update-not-available", () => {
       console.log("[UpdateManager] Application is up-to-date.");
       this.sendToRenderer("update-not-available");
     });
-    import_electron_updater.autoUpdater.on("download-progress", (progressObj) => {
+    this.autoUpdater.on("download-progress", (progressObj) => {
       this.sendToRenderer("download-progress", {
         percent: progressObj.percent,
         bytesPerSecond: progressObj.bytesPerSecond,
@@ -122,36 +138,45 @@ var UpdateManager = class {
         transferred: progressObj.transferred
       });
     });
-    import_electron_updater.autoUpdater.on("update-downloaded", (info) => {
+    this.autoUpdater.on("update-downloaded", (info) => {
       console.log("[UpdateManager] Update successfully downloaded:", info.version);
       this.sendToRenderer("update-downloaded", {
         version: info.version
       });
     });
-    import_electron_updater.autoUpdater.on("error", (err) => {
+    this.autoUpdater.on("error", (err) => {
       console.error("[UpdateManager] Error during update sequence:", err);
       this.sendToRenderer("update-error", {
         error: err.message || "Erro inesperado ao verificar/baixar atualiza\xE7\xF5es."
       });
     });
     import_electron.ipcMain.on("start-download-update", () => {
+      if (!this.autoUpdater) {
+        return;
+      }
       console.log("[UpdateManager] Manual trigger download-update requested");
-      import_electron_updater.autoUpdater.downloadUpdate().catch((err) => {
+      this.autoUpdater.downloadUpdate().catch((err) => {
         console.error("[UpdateManager] Manual download trigger failed:", err);
       });
     });
     import_electron.ipcMain.on("install-update-now", () => {
+      if (!this.autoUpdater) {
+        return;
+      }
       console.log("[UpdateManager] Installer restart confirmed. Executing quitAndInstall...");
       try {
-        import_electron_updater.autoUpdater.quitAndInstall();
+        this.autoUpdater.quitAndInstall();
       } catch (err) {
         console.error("[UpdateManager] quitAndInstall invocation failed:", err);
       }
     });
   }
   checkForUpdates() {
+    if (!this.autoUpdater) {
+      return;
+    }
     console.log("[UpdateManager] Initiating updates check...");
-    import_electron_updater.autoUpdater.checkForUpdates().catch((err) => {
+    this.autoUpdater.checkForUpdates().catch((err) => {
       console.log("[UpdateManager] Safe updates check bypassed (likely offline):", err.message || err);
     });
   }
@@ -232,8 +257,7 @@ function createWindow() {
       contextIsolation: true,
       preload: import_path2.default.join(__dirname, "preload.cjs")
     },
-    icon: import_path2.default.join(__dirname, "../public/icon.png")
-    // Assume an icon exists
+    icon: import_path2.default.join(__dirname, "../public/icon.ico")
   });
   const url = "http://localhost:3000";
   mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL) => {

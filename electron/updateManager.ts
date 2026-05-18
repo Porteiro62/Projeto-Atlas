@@ -1,8 +1,8 @@
-import { autoUpdater } from 'electron-updater';
-import { BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import type { AppUpdater } from 'electron-updater';
 
 // Configure a custom robust diagnostic file logger for the Auto-Updater
 const getAtlasDir = () => {
@@ -46,29 +46,49 @@ const customLogger = {
   }
 };
 
-autoUpdater.logger = customLogger;
-
 export class UpdateManager {
   private mainWindow: BrowserWindow;
+  private autoUpdater: AppUpdater | null = null;
 
   constructor(window: BrowserWindow) {
     this.mainWindow = window;
+    this.autoUpdater = this.createAutoUpdater();
     this.setupListeners();
   }
 
+  private createAutoUpdater(): AppUpdater | null {
+    // electron-updater is only safe/useful for packaged builds.
+    if (!app.isPackaged) {
+      return null;
+    }
+
+    try {
+      const { autoUpdater } = require('electron-updater') as typeof import('electron-updater');
+      autoUpdater.logger = customLogger;
+      return autoUpdater;
+    } catch (error) {
+      console.error('[UpdateManager] Failed to initialize autoUpdater:', error);
+      return null;
+    }
+  }
+
   private setupListeners() {
+    if (!this.autoUpdater) {
+      return;
+    }
+
     // Configure updater behavior
-    autoUpdater.autoInstallOnAppQuit = false; // Never force install on quit without asking
-    autoUpdater.autoDownload = true; // Download silently in the background
+    this.autoUpdater.autoInstallOnAppQuit = false; // Never force install on quit without asking
+    this.autoUpdater.autoDownload = true; // Download silently in the background
 
     // 1. Checking for update
-    autoUpdater.on('checking-for-update', () => {
+    this.autoUpdater.on('checking-for-update', () => {
       console.log('[UpdateManager] Checking for updates...');
       this.sendToRenderer('checking-for-update');
     });
 
     // 2. Update available
-    autoUpdater.on('update-available', (info) => {
+    this.autoUpdater.on('update-available', (info) => {
       console.log('[UpdateManager] New update available:', info.version);
       
       let releaseNotes = '';
@@ -92,13 +112,13 @@ export class UpdateManager {
     });
 
     // 3. Update not available
-    autoUpdater.on('update-not-available', () => {
+    this.autoUpdater.on('update-not-available', () => {
       console.log('[UpdateManager] Application is up-to-date.');
       this.sendToRenderer('update-not-available');
     });
 
     // 4. Download progress
-    autoUpdater.on('download-progress', (progressObj) => {
+    this.autoUpdater.on('download-progress', (progressObj) => {
       this.sendToRenderer('download-progress', {
         percent: progressObj.percent,
         bytesPerSecond: progressObj.bytesPerSecond,
@@ -108,7 +128,7 @@ export class UpdateManager {
     });
 
     // 5. Update downloaded
-    autoUpdater.on('update-downloaded', (info) => {
+    this.autoUpdater.on('update-downloaded', (info) => {
       console.log('[UpdateManager] Update successfully downloaded:', info.version);
       this.sendToRenderer('update-downloaded', {
         version: info.version
@@ -116,7 +136,7 @@ export class UpdateManager {
     });
 
     // 6. Error handling
-    autoUpdater.on('error', (err) => {
+    this.autoUpdater.on('error', (err) => {
       console.error('[UpdateManager] Error during update sequence:', err);
       this.sendToRenderer('update-error', {
         error: err.message || 'Erro inesperado ao verificar/baixar atualizações.'
@@ -125,17 +145,23 @@ export class UpdateManager {
 
     // --- IPC Interactions from Renderer Process ---
     ipcMain.on('start-download-update', () => {
+      if (!this.autoUpdater) {
+        return;
+      }
       console.log('[UpdateManager] Manual trigger download-update requested');
-      autoUpdater.downloadUpdate().catch(err => {
+      this.autoUpdater.downloadUpdate().catch(err => {
         console.error('[UpdateManager] Manual download trigger failed:', err);
       });
     });
 
     ipcMain.on('install-update-now', () => {
+      if (!this.autoUpdater) {
+        return;
+      }
       console.log('[UpdateManager] Installer restart confirmed. Executing quitAndInstall...');
       // Safe guard against quitting in the middle of crucial operations in electron main side
       try {
-        autoUpdater.quitAndInstall();
+        this.autoUpdater.quitAndInstall();
       } catch (err) {
         console.error('[UpdateManager] quitAndInstall invocation failed:', err);
       }
@@ -143,10 +169,14 @@ export class UpdateManager {
   }
 
   public checkForUpdates() {
+    if (!this.autoUpdater) {
+      return;
+    }
+
     console.log('[UpdateManager] Initiating updates check...');
     // checkForUpdatesAndNotify handles checking and automatically triggers download since autoDownload is true.
     // If offline, catch error silently.
-    autoUpdater.checkForUpdates().catch(err => {
+    this.autoUpdater.checkForUpdates().catch(err => {
       console.log('[UpdateManager] Safe updates check bypassed (likely offline):', err.message || err);
     });
   }

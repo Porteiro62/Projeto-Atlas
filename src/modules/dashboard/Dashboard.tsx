@@ -1,380 +1,403 @@
-import React, { useEffect, useMemo } from 'react';
-import { 
-  Wallet, 
-  ArrowUpRight, 
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Wallet,
+  ArrowUpRight,
   ArrowDownRight,
-  Home,
-  Target,
-  BarChart3,
   CalendarDays,
-  TrendingUp,
+  ChevronLeft,
+  ChevronRight,
   LineChart as LineChartIcon,
-  Plus,
-  Trash2,
-  Edit2
+  PieChart as PieChartIcon,
+  Target,
+  Home,
 } from 'lucide-react';
-import { TransactionForm } from '../transactions/TransactionForm';
-import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { useFinanceStore, Transaction } from '../../store/useFinanceStore';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import { useFinanceStore } from '../../store/useFinanceStore';
+import { FinancingMetaForm } from '../financing/FinancingMetaForm';
+import {
   ResponsiveContainer,
-  AreaChart,
+  ComposedChart,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
   Area,
+  Line,
   PieChart,
   Pie,
-  Cell
+  Cell,
 } from 'recharts';
-import { format, parseISO } from 'date-fns';
+import { addMonths, format, parseISO, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+});
+
+const COLORS = ['#26d0a8', '#3b82f6', '#f59e0b', '#ef4444', '#0f172a', '#14b8a6'];
+
+function getMonthLabel(month: number, year: number) {
+  return format(new Date(year, month, 1), 'MMMM yyyy', { locale: ptBR });
+}
+
 export function Dashboard() {
-  const { summary, transactions, fetchSummary, fetchTransactions, financingMeta, deleteTransaction, deleteAllTransactions } = useFinanceStore();
-  const [editingTransaction, setEditingTransaction] = React.useState<Transaction | null>(null);
-  const [isFormOpen, setIsFormOpen] = React.useState(false);
-  const [confirmConfig, setConfirmConfig] = React.useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void } | null>(null);
+  const {
+    transactions,
+    financingMeta,
+    selectedMonth,
+    selectedYear,
+    setDate,
+    fetchTransactions,
+    fetchSummary,
+    fetchFinancingMeta,
+  } = useFinanceStore();
+  const [isMetaFormOpen, setIsMetaFormOpen] = useState(false);
 
   useEffect(() => {
-    fetchSummary();
     fetchTransactions();
+    fetchSummary();
+    fetchFinancingMeta();
   }, []);
 
-  const handleEdit = (tx: Transaction) => {
-    setEditingTransaction(tx);
-    setIsFormOpen(true);
+  const changeMonth = (offset: number) => {
+    const baseDate = addMonths(new Date(selectedYear, selectedMonth, 1), offset);
+    setDate(baseDate.getMonth(), baseDate.getFullYear());
   };
 
-  const handleDelete = async (id: string) => {
-    setConfirmConfig({
-      isOpen: true,
-      title: 'Excluir Transação',
-      message: 'Deseja realmente excluir esta transação? Esta ação não pode ser desfeita.',
-      onConfirm: () => deleteTransaction(id)
-    });
-  };
-
-  const handleDeleteAll = async () => {
-    setConfirmConfig({
-      isOpen: true,
-      title: 'Zerar Banco de Dados',
-      message: 'Deseja realmente excluir TODOS os dados do sistema? Esta ação é irreversível.',
-      onConfirm: () => deleteAllTransactions()
-    });
-  };
-
-  const handleCloseForm = () => {
-    setIsFormOpen(false);
-    setEditingTransaction(null);
-  };
-
-  // Filter for Financing (considering only dates <= today)
-  const financingContributions = useMemo(() => {
-    const today = new Date();
-    return transactions
-      .filter(t => t.type === 'financing' && parseISO(t.date) <= today)
-      .reduce((acc, curr) => acc + curr.value, 0) + (financingMeta.initialValue || 0);
-  }, [transactions, financingMeta]);
-  
-  const financingProgress = Math.min((financingContributions / financingMeta.target) * 100, 100);
-
-  // Future transactions (pendentes)
-  const futureExpenses = useMemo(() => {
-    return transactions
-      .filter(t => t.type === 'expense' && t.status === 'pending')
-      .reduce((acc, curr) => acc + curr.value, 0);
-  }, [transactions]);
-
-  // Data for Category Chart
-  const categoryData = useMemo(() => {
-    const categories: Record<string, number> = {};
-    transactions.filter(t => t.type === 'expense').forEach(t => {
-      categories[t.category] = (categories[t.category] || 0) + t.value;
-    });
-    return Object.entries(categories)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
-  }, [transactions]);
-
-  // Monthly evolution data
-  const monthlyData = useMemo(() => {
-    const months: Record<string, { name: string, receitas: number, despesas: number }> = {};
-    transactions.slice(0, 50).forEach(t => {
-      const monthKey = format(parseISO(t.date), 'MMM', { locale: ptBR });
-      if (!months[monthKey]) {
-        months[monthKey] = { name: monthKey, receitas: 0, despesas: 0 };
+  const monthlySummary = useMemo(() => {
+    return transactions.reduce((acc, transaction) => {
+      const date = parseISO(transaction.date);
+      if (date.getMonth() !== selectedMonth || date.getFullYear() !== selectedYear) {
+        return acc;
       }
-      if (t.type === 'income') months[monthKey].receitas += t.value;
-      else if (t.type === 'expense') months[monthKey].despesas += t.value;
+
+      if (transaction.type === 'income') {
+        acc.income += transaction.value;
+      }
+
+      if (transaction.type === 'expense' || transaction.type === 'credit_card') {
+        acc.expense += transaction.value;
+      }
+
+      acc.balance = acc.income - acc.expense;
+      return acc;
+    }, {
+      income: 0,
+      expense: 0,
+      balance: 0,
     });
-    return Object.values(months);
-  }, [transactions]);
+  }, [transactions, selectedMonth, selectedYear]);
 
-  const COLORS = ['#26d0a8', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
+  const annualSummary = useMemo(() => {
+    return Array.from({ length: 12 }, (_, index) => {
+      const date = subMonths(new Date(selectedYear, selectedMonth, 1), 11 - index);
+      const summary = transactions.reduce((acc, transaction) => {
+        const transactionDate = parseISO(transaction.date);
+        if (transactionDate.getMonth() !== date.getMonth() || transactionDate.getFullYear() !== date.getFullYear()) {
+          return acc;
+        }
 
-  const stats = [
-    { 
-      label: 'Saldo Total', 
-      value: summary.balance, 
-      icon: Wallet, 
-      color: 'text-stone-900',
-      bg: 'bg-stone-50',
-      trend: '+2.5%'
-    },
-    { 
-      label: 'Receitas', 
-      value: summary.income, 
-      icon: ArrowUpRight, 
-      color: 'text-atlas-emerald',
-      bg: 'bg-atlas-emerald/10',
-      trend: '+12%'
-    },
-    { 
-      label: 'Despesas', 
-      value: summary.expense, 
-      icon: ArrowDownRight, 
-      color: 'text-rose-500',
-      bg: 'bg-rose-50',
-      trend: '-4%'
-    },
-    { 
-      label: 'Despesas Futuras', 
-      value: futureExpenses, 
-      icon: CalendarDays, 
-      color: 'text-amber-500',
-      bg: 'bg-amber-50',
-      trend: 'Previsto'
-    },
+        if (transaction.type === 'income') {
+          acc.income += transaction.value;
+        }
+
+        if (transaction.type === 'expense' || transaction.type === 'credit_card') {
+          acc.expense += transaction.value;
+        }
+
+        acc.balance = acc.income - acc.expense;
+        return acc;
+      }, {
+        income: 0,
+        expense: 0,
+        balance: 0,
+      });
+
+      return {
+        label: format(date, 'MMM/yyyy', { locale: ptBR }),
+        ...summary,
+      };
+    });
+  }, [transactions, selectedMonth, selectedYear]);
+
+  const monthlyDetails = [
+    { label: 'Total de receitas', value: monthlySummary.income, icon: ArrowUpRight, tone: 'text-atlas-emerald bg-atlas-emerald/10' },
+    { label: 'Total de despesas', value: monthlySummary.expense, icon: ArrowDownRight, tone: 'text-rose-500 bg-rose-50' },
+    { label: 'Saldo total', value: monthlySummary.balance, icon: Wallet, tone: 'text-stone-900 bg-stone-100' },
   ];
 
+  const categoryData = useMemo(() => {
+    const categories: Record<string, number> = {};
+
+    transactions.forEach((transaction) => {
+      const date = parseISO(transaction.date);
+      if (date.getMonth() !== selectedMonth || date.getFullYear() !== selectedYear) return;
+      if (transaction.type !== 'expense' && transaction.type !== 'credit_card') return;
+
+      categories[transaction.category] = (categories[transaction.category] || 0) + transaction.value;
+    });
+
+    return Object.entries(categories)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [transactions, selectedMonth, selectedYear]);
+
+  const financingAccumulated = useMemo(() => {
+    const today = new Date();
+    return transactions
+      .filter((transaction) => transaction.type === 'financing' && parseISO(transaction.date) <= today)
+      .reduce((sum, transaction) => sum + transaction.value, 0) + (Number(financingMeta.initialValue) || 0);
+  }, [transactions, financingMeta]);
+
+  const financingProgress = financingMeta.target > 0
+    ? Math.min((financingAccumulated / financingMeta.target) * 100, 100)
+    : 0;
+
+  const remainingValue = Math.max((financingMeta.target || 0) - financingAccumulated, 0);
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-stone-900 tracking-tight">Panorama Consolidado</h2>
-          <p className="text-stone-500 text-sm">Visão geral de todos os seus módulos financeiros.</p>
-        </div>
-        <button 
-          onClick={handleDeleteAll}
-          className="flex items-center gap-2 bg-white hover:bg-rose-50 text-rose-500 px-6 py-2.5 rounded-xl transition-all border border-rose-100 shadow-sm font-bold text-sm h-[42px]"
-        >
-          <Trash2 size={20} />
-          Limpar Base de Dados
-        </button>
-      </header>
-
-      {isFormOpen && <TransactionForm onClose={handleCloseForm} initialData={editingTransaction || undefined} />}
-      {confirmConfig && (
-        <ConfirmDialog 
-          isOpen={confirmConfig.isOpen}
-          onClose={() => setConfirmConfig(null)}
-          onConfirm={confirmConfig.onConfirm}
-          title={confirmConfig.title}
-          message={confirmConfig.message}
-        />
-      )}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => (
-          <div key={i} className="bg-white border border-stone-200 p-6 rounded-3xl shadow-sm hover:shadow-md transition-shadow group">
-            <div className="flex items-center justify-between mb-4">
-              <div className={`p-3 rounded-2xl ${stat.bg} ${stat.color} group-hover:scale-110 transition-transform`}>
-                <stat.icon size={20} />
-              </div>
-              <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-widest ${
-                stat.trend.startsWith('+') ? 'bg-atlas-emerald/10 text-atlas-emerald' : 
-                stat.trend.startsWith('-') ? 'bg-rose-50 text-rose-600' : 'bg-stone-100 text-stone-500'
-              }`}>
-                {stat.trend}
-              </span>
-            </div>
-            <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mb-1">{stat.label}</p>
-            <h3 className="text-2xl font-bold text-stone-900 tracking-tight">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(stat.value)}
-            </h3>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Chart */}
-        <div className="lg:col-span-2 bg-white border border-stone-200 p-8 rounded-3xl shadow-sm">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h4 className="text-sm font-bold text-stone-900 uppercase tracking-widest">Fluxo Mensal</h4>
-              <p className="text-xs text-stone-400 font-medium">Histórico de movimentações por mês</p>
-            </div>
-            <BarChart3 size={20} className="text-stone-300" />
-          </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyData.length > 0 ? monthlyData : [{ name: 'N/A', receitas: 0, despesas: 0 }]}>
-                <defs>
-                  <linearGradient id="colorReceitas" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#26d0a8" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="#26d0a8" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
-                  dy={10}
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#fff', 
-                    borderRadius: '16px', 
-                    border: '1px solid #e5e7eb',
-                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                    fontSize: '12px'
-                  }} 
-                />
-                <Area type="monotone" dataKey="receitas" stroke="#26d0a8" fillOpacity={1} fill="url(#colorReceitas)" strokeWidth={3} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          <h2 className="text-2xl font-bold text-stone-900 tracking-tight">Panorama Geral</h2>
+          <p className="text-sm text-stone-500">Analise mensal e anual consolidada do Atlas.</p>
         </div>
 
-        {/* Financing Progress */}
-        <div className="bg-white p-8 rounded-3xl text-stone-900 shadow-sm flex flex-col justify-between relative overflow-hidden border border-stone-200">
-          <div className="absolute top-0 right-0 p-6 opacity-[0.06] text-stone-900">
-            <Target size={120} />
-          </div>
-          
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-6">
-              <Home size={20} className="text-atlas-emerald" />
-              <h4 className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">Meta Patrimonial</h4>
-            </div>
-            
-            <h3 className="text-4xl font-bold mb-2 tracking-tight text-stone-900">
-              {financingProgress.toFixed(1)}%
-            </h3>
-            <p className="text-xs text-stone-500 font-medium leading-relaxed mb-8">
-              Você já acumulou {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financingContributions)} para sua meta imobiliária.
-            </p>
-
-            <div className="space-y-4">
-              <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-atlas-emerald transition-all duration-1000 shadow-[0_0_10px_rgba(38,208,168,0.4)]"
-                  style={{ width: `${financingProgress}%` }}
-                ></div>
-              </div>
-              <div className="flex justify-between text-[10px] font-bold text-stone-500 uppercase tracking-widest">
-                <span>Início: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financingMeta.initialValue)}</span>
-                <span>Alvo: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financingMeta.target)}</span>
-              </div>
-            </div>
-          </div>
-
-          <button className="relative z-10 mt-8 w-full py-3 bg-stone-900 text-white border border-stone-900 rounded-2xl font-bold text-xs hover:bg-stone-800 transition-all active:scale-95 shadow-sm">
-            Gerenciar Meta
+        <div className="flex items-center bg-white border border-stone-200 rounded-xl px-2 py-1 shadow-sm h-[42px]">
+          <button onClick={() => changeMonth(-1)} className="p-1 text-stone-400 hover:text-stone-900 transition-colors">
+            <ChevronLeft size={20} />
+          </button>
+          <span className="px-4 text-[10px] font-bold uppercase tracking-widest text-stone-700 min-w-[150px] text-center">
+            {getMonthLabel(selectedMonth, selectedYear)}
+          </span>
+          <button onClick={() => changeMonth(1)} className="p-1 text-stone-400 hover:text-stone-900 transition-colors">
+            <ChevronRight size={20} />
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Category Breakdown & Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white border border-stone-200 p-8 rounded-3xl shadow-sm">
-           <div className="flex items-center justify-between mb-8">
-              <h4 className="text-sm font-bold text-stone-900 uppercase tracking-widest">Gastos por Categoria</h4>
-              <BarChart3 size={18} className="text-stone-300" />
-           </div>
-           
-           <div className="flex flex-col md:flex-row items-center gap-8">
-              <div className="h-[200px] w-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={categoryData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {categoryData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex-1 space-y-4">
-                {categoryData.map((item, idx) => (
-                  <div key={item.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></div>
-                      <span className="text-xs text-stone-500 font-bold uppercase tracking-wider">{item.name}</span>
-                    </div>
-                    <span className="text-sm font-bold text-stone-900">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.value)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-           </div>
+      <section className="bg-white border border-stone-200 rounded-3xl p-8 shadow-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-3 rounded-2xl bg-stone-100 text-stone-900">
+            <CalendarDays size={20} />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-stone-900 uppercase tracking-widest">Panorama Mensal</h3>
+            <p className="text-xs text-stone-400 font-medium">Lista detalhada do mes selecionado.</p>
+          </div>
         </div>
 
-        <div className="bg-white border border-stone-200 p-8 rounded-3xl shadow-sm">
-           <div className="flex items-center justify-between mb-8">
-              <h4 className="text-sm font-bold text-stone-900 uppercase tracking-widest">Timeline Consolidada</h4>
-              <TrendingUp size={18} className="text-stone-300" />
-           </div>
-           <div className="space-y-6">
-              {transactions.slice(0, 4).map(tx => (
-                <div key={tx.id} className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className={`p-2 rounded-xl ${
-                      tx.type === 'income' ? 'bg-atlas-emerald/10 text-atlas-emerald' : 
-                      tx.type === 'financing' ? 'bg-atlas-teal/10 text-atlas-teal' : 'bg-rose-50 text-rose-600'
-                    }`}>
-                      {tx.type === 'income' ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-stone-900">{tx.description}</p>
-                      <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">{format(parseISO(tx.date), 'dd MMM yyyy', { locale: ptBR })}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className={`text-sm font-bold ${tx.type === 'income' ? 'text-atlas-emerald' : 'text-stone-900'}`}>
-                      {tx.type === 'income' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.value)}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button 
-                        onClick={() => handleEdit(tx)}
-                        className="p-1 px-1.5 text-stone-300 hover:text-atlas-teal transition-colors"
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(tx.id)}
-                        className="p-1 px-1.5 text-stone-300 hover:text-rose-500 transition-colors"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
+        <div className="space-y-4">
+          {monthlyDetails.map((item) => (
+            <div key={item.label} className="flex items-center justify-between rounded-2xl border border-stone-100 bg-stone-50/70 px-5 py-4">
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-2xl ${item.tone}`}>
+                  <item.icon size={18} />
                 </div>
-              ))}
-           </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">{item.label}</p>
+                  <p className="text-sm text-stone-500">{getMonthLabel(selectedMonth, selectedYear)}</p>
+                </div>
+              </div>
+              <p className="text-lg font-bold text-stone-900">{currencyFormatter.format(item.value)}</p>
+            </div>
+          ))}
         </div>
-      </div>
+      </section>
+
+      <section className="bg-white border border-stone-200 rounded-3xl p-8 shadow-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-3 rounded-2xl bg-atlas-teal/10 text-atlas-emerald">
+            <CalendarDays size={20} />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-stone-900 uppercase tracking-widest">Panorama Anual</h3>
+            <p className="text-xs text-stone-400 font-medium">Faixa detalhada dos ultimos 12 meses.</p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {annualSummary.map((item) => (
+            <div key={item.label} className="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-2xl border border-stone-100 px-5 py-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Mes</p>
+                <p className="text-sm font-bold text-stone-900">{item.label}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Receitas</p>
+                <p className="text-sm font-bold text-atlas-emerald">{currencyFormatter.format(item.income)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Despesas</p>
+                <p className="text-sm font-bold text-rose-500">{currencyFormatter.format(item.expense)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Saldo</p>
+                <p className="text-sm font-bold text-stone-900">{currencyFormatter.format(item.balance)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="bg-white border border-stone-200 rounded-3xl p-8 shadow-sm">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h3 className="text-sm font-bold text-stone-900 uppercase tracking-widest">Fluxo Mensal</h3>
+            <p className="text-xs text-stone-400 font-medium">Receitas em area verde e despesas em linha vermelha.</p>
+          </div>
+          <LineChartIcon size={20} className="text-stone-300" />
+        </div>
+
+        <div className="h-[320px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={annualSummary}>
+              <defs>
+                <linearGradient id="monthlyIncomeArea" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#26d0a8" stopOpacity={0.18} />
+                  <stop offset="95%" stopColor="#26d0a8" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis
+                dataKey="label"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
+              />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
+              />
+              <Tooltip
+                formatter={(value: number) => currencyFormatter.format(value)}
+                contentStyle={{
+                  backgroundColor: '#fff',
+                  borderRadius: '16px',
+                  border: '1px solid #e5e7eb',
+                  boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                  fontSize: '12px',
+                }}
+              />
+              <Area type="monotone" dataKey="income" stroke="#26d0a8" fill="url(#monthlyIncomeArea)" strokeWidth={3} />
+              <Line type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+
+      <section className="bg-white border border-stone-200 rounded-3xl p-8 shadow-sm">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h3 className="text-sm font-bold text-stone-900 uppercase tracking-widest">Gastos por Categoria</h3>
+            <p className="text-xs text-stone-400 font-medium">Distribuicao das despesas do mes selecionado.</p>
+          </div>
+          <PieChartIcon size={20} className="text-stone-300" />
+        </div>
+
+        <div className="flex flex-col lg:flex-row items-center gap-8">
+          <div className="h-[220px] w-[220px] shrink-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={categoryData.length ? categoryData : [{ name: 'Sem gastos', value: 1 }]}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={62}
+                  outerRadius={86}
+                  paddingAngle={4}
+                  dataKey="value"
+                >
+                  {(categoryData.length ? categoryData : [{ name: 'Sem gastos', value: 1 }]).map((entry, index) => (
+                    <Cell key={`${entry.name}-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value: number) => currencyFormatter.format(value)} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex-1 w-full space-y-3">
+            {(categoryData.length ? categoryData : [{ name: 'Sem gastos no periodo', value: 0 }]).map((item, index) => (
+              <div key={item.name} className="flex items-center justify-between rounded-2xl border border-stone-100 px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                  <span className="text-sm font-semibold text-stone-700">{item.name}</span>
+                </div>
+                <span className="text-sm font-bold text-stone-900">{currencyFormatter.format(item.value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white border border-stone-200 rounded-3xl p-8 shadow-sm">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 rounded-2xl bg-stone-900 text-white">
+                <Home size={20} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-stone-900 uppercase tracking-widest">Meta Patrimonial</h3>
+                <p className="text-xs text-stone-400 font-medium">Acompanhamento consolidado da meta cadastrada.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="rounded-2xl border border-stone-100 bg-stone-50/80 px-5 py-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Acumulado</p>
+                <p className="text-xl font-bold text-stone-900">{currencyFormatter.format(financingAccumulated)}</p>
+              </div>
+              <div className="rounded-2xl border border-stone-100 bg-stone-50/80 px-5 py-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Meta</p>
+                <p className="text-xl font-bold text-stone-900">{currencyFormatter.format(financingMeta.target || 0)}</p>
+              </div>
+              <div className="rounded-2xl border border-stone-100 bg-stone-50/80 px-5 py-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Faltante</p>
+                <p className="text-xl font-bold text-rose-500">{currencyFormatter.format(remainingValue)}</p>
+              </div>
+            </div>
+
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Progresso da meta</span>
+              <span className="text-sm font-bold text-atlas-emerald">{financingProgress.toFixed(1)}%</span>
+            </div>
+            <div className="w-full h-3 bg-stone-100 rounded-full overflow-hidden border border-stone-200">
+              <div
+                className="h-full bg-atlas-emerald transition-all duration-1000"
+                style={{ width: `${financingProgress}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="w-full lg:max-w-xs rounded-3xl bg-stone-900 text-white p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <Target size={18} className="text-atlas-emerald" />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-300">Resumo da Meta</p>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Valor inicial</p>
+                <p className="text-lg font-bold">{currencyFormatter.format(financingMeta.initialValue || 0)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Aporte mensal</p>
+                <p className="text-lg font-bold">{currencyFormatter.format(financingMeta.monthlyInstallment || 0)}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsMetaFormOpen(true)}
+              className="mt-6 w-full rounded-2xl bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-stone-900 transition-all hover:bg-stone-100"
+            >
+              Gerenciar Metas
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {isMetaFormOpen && <FinancingMetaForm onClose={() => setIsMetaFormOpen(false)} />}
     </div>
   );
 }

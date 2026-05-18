@@ -52,13 +52,15 @@ interface FinanceState {
   loading: boolean;
   fetchTransactions: () => Promise<void>;
   fetchSummary: () => Promise<void>;
+  fetchFinancingMeta: () => Promise<void>;
+  fetchUserProfile: () => Promise<void>;
   addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void>;
   addTransactions: (txs: Omit<Transaction, 'id'>[]) => Promise<void>;
   updateTransaction: (id: string, tx: Partial<Transaction>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   deleteAllTransactions: (type?: Transaction['type']) => Promise<void>;
-  updateFinancingMeta: (meta: FinancingMeta) => void;
-  updateUser: (user: Partial<UserProfile>) => void;
+  updateFinancingMeta: (meta: FinancingMeta) => Promise<void>;
+  updateUser: (user: Partial<UserProfile>) => Promise<void>;
   checkAuthStatus: () => Promise<void>;
   registerUser: (name: string, username: string, pin: string) => Promise<boolean>;
   loginUser: (pin: string) => Promise<boolean>;
@@ -90,6 +92,20 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     const res = await fetch('/api/dashboard/summary');
     const data = await res.json();
     set({ summary: data });
+  },
+
+  fetchFinancingMeta: async () => {
+    const res = await fetch('/api/settings/financing-meta');
+    if (!res.ok) return;
+    const data = await res.json();
+    set({ financingMeta: data });
+  },
+
+  fetchUserProfile: async () => {
+    const res = await fetch('/api/profile');
+    if (!res.ok) return;
+    const data = await res.json();
+    set({ user: data });
   },
 
   addTransaction: async (tx) => {
@@ -153,11 +169,36 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     }
   },
 
-  updateFinancingMeta: (meta) => set({ financingMeta: meta }),
+  updateFinancingMeta: async (meta) => {
+    const res = await fetch('/api/settings/financing-meta', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(meta),
+    });
 
-  updateUser: (userData) => set((state) => ({
-    user: state.user ? { ...state.user, ...userData } : null
-  })),
+    if (!res.ok) return;
+    const data = await res.json();
+    set({ financingMeta: data });
+  },
+
+  updateUser: async (userData) => {
+    const state = get();
+    const payload = {
+      name: userData.name ?? state.user?.name ?? '',
+      username: userData.username ?? state.user?.username ?? '',
+      photoUrl: userData.photoUrl ?? state.user?.photoUrl ?? null,
+    };
+
+    const res = await fetch('/api/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) return;
+    const data = await res.json();
+    set({ user: data });
+  },
 
   checkAuthStatus: async () => {
     set({ authStatus: 'loading' });
@@ -225,9 +266,12 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
           isAuthenticated: true
         });
         
-        // Fetch fresh decrypted data
-        await get().fetchTransactions();
-        await get().fetchSummary();
+        await Promise.all([
+          get().fetchTransactions(),
+          get().fetchSummary(),
+          get().fetchFinancingMeta(),
+          get().fetchUserProfile(),
+        ]);
         return true;
       }
       return false;
@@ -263,15 +307,19 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       });
 
       if (unlockRes.ok) {
+        const unlockData = await unlockRes.json();
         set({
-          user: { name: data.name, username: data.username, photoUrl: null },
+          user: { name: unlockData.name, username: unlockData.username, photoUrl: unlockData.photoUrl ?? null },
           authStatus: 'authenticated',
           isAuthenticated: true
         });
         
-        // Fetch fresh database transactions and summary
-        await get().fetchTransactions();
-        await get().fetchSummary();
+        await Promise.all([
+          get().fetchTransactions(),
+          get().fetchSummary(),
+          get().fetchFinancingMeta(),
+          get().fetchUserProfile(),
+        ]);
         return true;
       }
       return false;
@@ -313,15 +361,19 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       });
 
       if (unlockRes.ok) {
+        const unlockData = await unlockRes.json();
         set({
-          user: { name: verifyData.name, username: verifyData.username, photoUrl: null },
+          user: { name: unlockData.name, username: unlockData.username, photoUrl: unlockData.photoUrl ?? null },
           authStatus: 'authenticated',
           isAuthenticated: true
         });
         
-        // Fetch fresh database transactions and summary
-        await get().fetchTransactions();
-        await get().fetchSummary();
+        await Promise.all([
+          get().fetchTransactions(),
+          get().fetchSummary(),
+          get().fetchFinancingMeta(),
+          get().fetchUserProfile(),
+        ]);
         return true;
       }
       return false;
@@ -340,7 +392,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       authStatus: 'locked',
       isAuthenticated: false,
       transactions: [],
-      summary: { income: 0, expense: 0, balance: 0 }
+      summary: { income: 0, expense: 0, balance: 0 },
+      financingMeta: { target: 0, initialValue: 0, monthlyInstallment: 0 },
     });
   },
 

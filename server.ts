@@ -3,7 +3,7 @@ import path from "path";
 import { db, isDatabaseUnlocked, isDatabaseRegistered, getAuthConfig, saveAuthConfig, unlockDatabase, lockDatabase, type StoredWebAuthnCredential } from "./src/database/db.ts";
 import { hashPin } from "./src/utils/crypto.ts";
 import crypto from "node:crypto";
-import { transactions, creditCards, financings } from "./src/database/schema.ts";
+import { transactions, creditCards, financings, appSettings } from "./src/database/schema.ts";
 import { eq, desc, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -27,6 +27,51 @@ let currentRegistrationChallenge: string | null = null;
 let currentAuthenticationChallenge: string | null = null;
 let failedPinAttempts = 0;
 let pinLockUntil = 0;
+const FINANCING_META_KEY = "financing_meta";
+
+function getDefaultFinancingMeta() {
+  return {
+    target: 0,
+    initialValue: 0,
+    monthlyInstallment: 0,
+  };
+}
+
+async function getFinancingMeta() {
+  const record = await db.query.appSettings.findFirst({
+    where: eq(appSettings.key, FINANCING_META_KEY),
+  });
+
+  if (!record) {
+    return getDefaultFinancingMeta();
+  }
+
+  try {
+    return {
+      ...getDefaultFinancingMeta(),
+      ...JSON.parse(record.value),
+    };
+  } catch (error) {
+    console.error("[Server] Invalid financing meta payload:", error);
+    return getDefaultFinancingMeta();
+  }
+}
+
+async function saveFinancingMeta(meta: { target: number; initialValue: number; monthlyInstallment: number }) {
+  const payload = JSON.stringify({
+    target: Number(meta.target) || 0,
+    initialValue: Number(meta.initialValue) || 0,
+    monthlyInstallment: Number(meta.monthlyInstallment) || 0,
+  });
+
+  await db
+    .insert(appSettings)
+    .values({ key: FINANCING_META_KEY, value: payload })
+    .onConflictDoUpdate({
+      target: appSettings.key,
+      set: { value: payload },
+    });
+}
 
 function toWebAuthnCredential(
   credential: StoredWebAuthnCredential | undefined,
@@ -132,7 +177,9 @@ async function startServer() {
         res.json({ 
           registered: true, 
           windowsHelloRegistered: Boolean(config?.webauthnCredential),
+          name: config?.name ?? null,
           username: config?.username ?? null,
+          photoUrl: config?.photoUrl ?? null,
         });
       } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -324,6 +371,7 @@ async function startServer() {
             success: true,
             name: config.name,
             username: config.username,
+            photoUrl: config.photoUrl ?? null,
             masterKeyEncrypted: config.masterKeyEncrypted
           });
         } else {
@@ -383,6 +431,7 @@ async function startServer() {
           success: true,
           name: config.name,
           username: config.username,
+          photoUrl: config.photoUrl ?? null,
           masterKeyEncrypted: config.masterKeyEncrypted,
         });
       } catch (err: any) {
@@ -404,7 +453,8 @@ async function startServer() {
         res.json({ 
           success: true,
           name: config ? config.name : 'Usuário',
-          username: config ? config.username : 'usuario'
+          username: config ? config.username : 'usuario',
+          photoUrl: config?.photoUrl ?? null,
         });
       } catch (err: any) {
         console.error("[Server] Unlock database failed:", err);
@@ -543,6 +593,74 @@ async function startServer() {
       }
     });
 
+    app.get("/api/settings/financing-meta", async (req, res) => {
+      try {
+        res.json(await getFinancingMeta());
+      } catch (error) {
+        console.error("Error fetching financing meta:", error);
+        res.status(500).json({ error: "Failed to fetch financing meta" });
+      }
+    });
+
+    app.put("/api/settings/financing-meta", async (req, res) => {
+      try {
+        const meta = {
+          target: Number(req.body.target) || 0,
+          initialValue: Number(req.body.initialValue) || 0,
+          monthlyInstallment: Number(req.body.monthlyInstallment) || 0,
+        };
+
+        await saveFinancingMeta(meta);
+        res.json(meta);
+      } catch (error) {
+        console.error("Error saving financing meta:", error);
+        res.status(500).json({ error: "Failed to save financing meta" });
+      }
+    });
+
+    app.get("/api/profile", (req, res) => {
+      try {
+        const config = getAuthConfig();
+        if (!config) {
+          return res.status(404).json({ error: "Profile not found" });
+        }
+
+        res.json({
+          name: config.name,
+          username: config.username,
+          photoUrl: config.photoUrl ?? null,
+        });
+      } catch (error: any) {
+        console.error("Error fetching profile:", error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    app.put("/api/profile", (req, res) => {
+      try {
+        const config = getAuthConfig();
+        if (!config) {
+          return res.status(404).json({ error: "Profile not found" });
+        }
+
+        const updatedProfile = {
+          name: String(req.body.name || config.name).trim(),
+          username: String(req.body.username || config.username).trim(),
+          photoUrl: req.body.photoUrl ? String(req.body.photoUrl) : null,
+        };
+
+        saveAuthConfig({
+          ...config,
+          ...updatedProfile,
+        });
+
+        res.json(updatedProfile);
+      } catch (error: any) {
+        console.error("Error saving profile:", error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     // Vite middleware for development
     if (process.env.NODE_ENV !== "production") {
       console.log("Initializing Vite middleware...");
@@ -561,8 +679,19 @@ async function startServer() {
       });
     }
 
-    app.listen(PORT, "0.0.0.0", () => {
+    const server = app.listen(PORT, "0.0.0.0", () => {
       console.log(`> Server running on http://0.0.0.0:${PORT}`);
+    });
+
+    server.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE") {
+        console.error(`[Server] Port ${PORT} is already in use.`);
+        console.error("[Server] Close the running Atlas Electron instance or stop the other dev server before starting npm run dev.");
+        process.exit(1);
+      }
+
+      console.error("[Server] Failed to start HTTP server:", error);
+      process.exit(1);
     });
   } catch (err) {
     console.error("FATAL ERROR STARTING SERVER:", err);
