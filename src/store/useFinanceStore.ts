@@ -1,4 +1,10 @@
 import { create } from 'zustand';
+import {
+  browserSupportsWebAuthn,
+  platformAuthenticatorIsAvailable,
+  startAuthentication,
+  startRegistration,
+} from '@simplewebauthn/browser';
 
 export interface Transaction {
   id: string;
@@ -171,20 +177,35 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
   registerUser: async (name, username, pin) => {
     try {
+      if (!browserSupportsWebAuthn() || !(await platformAuthenticatorIsAvailable())) {
+        return false;
+      }
+      if (!window.electronAPI || !(await window.electronAPI.safeStorageIsAvailable())) {
+        return false;
+      }
+
       // 1. Generate a local master key (32 bytes, hex)
       const rawMasterBytes = new Uint8Array(32);
       window.crypto.getRandomValues(rawMasterBytes);
       const masterKeyRaw = Array.from(rawMasterBytes)
         .map(b => b.toString(16).padStart(2, '0')).join('');
 
-      // 2. Encrypt the master key using Windows Hello safeStorage DPAPI
-      let masterKeyEncrypted = masterKeyRaw;
-      if (window.electronAPI && await window.electronAPI.safeStorageIsAvailable()) {
-        masterKeyEncrypted = await window.electronAPI.safeStorageEncrypt(masterKeyRaw);
-      }
+      // 2. Protect the master key locally for this Windows user
+      const masterKeyEncrypted = await window.electronAPI.safeStorageEncrypt(masterKeyRaw);
 
-      // 3. Register user on the backend
-      const res = await fetch('/api/auth/register', {
+      // 3. Start Windows Hello registration via WebAuthn platform authenticator
+      const optionsRes = await fetch('/api/auth/webauthn/register/options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, username }),
+      });
+      if (!optionsRes.ok) return false;
+
+      const options = await optionsRes.json();
+      const registrationResponse = await startRegistration({ optionsJSON: options });
+
+      // 4. Register user on the backend after attestation verification
+      const res = await fetch('/api/auth/webauthn/register/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -192,7 +213,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
           username,
           pin,
           masterKeyEncrypted,
-          masterKeyRaw
+          masterKeyRaw,
+          response: registrationResponse,
         })
       });
 
@@ -261,34 +283,29 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
   loginWithWindowsHello: async () => {
     try {
-      // 1. Fetch status to check if registered and get the encrypted master key
-      const statusRes = await fetch('/api/auth/status');
-      const statusData = await statusRes.json();
-      if (!statusData.registered) return false;
+      if (!browserSupportsWebAuthn() || !(await platformAuthenticatorIsAvailable())) {
+        return false;
+      }
+      if (!window.electronAPI || !(await window.electronAPI.safeStorageIsAvailable())) {
+        return false;
+      }
 
-      // 2. Trigger Windows Hello biometric dialog using WebAuthn API!
-      const challenge = new Uint8Array(32);
-      window.crypto.getRandomValues(challenge);
-      
-      const credential = await navigator.credentials.get({
-        publicKey: {
-          challenge,
-          rpId: window.location.hostname, // Must match domain (usually localhost)
-          userVerification: "required"
-        }
+      const optionsRes = await fetch('/api/auth/webauthn/login/options');
+      if (!optionsRes.ok) return false;
+      const options = await optionsRes.json();
+      const authenticationResponse = await startAuthentication({ optionsJSON: options });
+
+      const verifyRes = await fetch('/api/auth/webauthn/login/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response: authenticationResponse }),
       });
-      
-      if (!credential) {
-        throw new Error("Windows Hello rejected by user.");
-      }
+      if (!verifyRes.ok) return false;
+      const verifyData = await verifyRes.json();
 
-      // 3. Decrypt the master key in the frontend using safeStorage DPAPI
-      let masterKeyHex = statusData.masterKeyEncrypted;
-      if (window.electronAPI && await window.electronAPI.safeStorageIsAvailable()) {
-        masterKeyHex = await window.electronAPI.safeStorageDecrypt(statusData.masterKeyEncrypted);
-      }
+      const masterKeyHex = await window.electronAPI.safeStorageDecrypt(verifyData.masterKeyEncrypted);
 
-      // 4. Unlock SQLite database
+      // Unlock SQLite database after a real Windows Hello prompt
       const unlockRes = await fetch('/api/auth/unlock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -296,9 +313,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       });
 
       if (unlockRes.ok) {
-        const unlockData = await unlockRes.json();
         set({
-          user: { name: unlockData.name, username: unlockData.username, photoUrl: null },
+          user: { name: verifyData.name, username: verifyData.username, photoUrl: null },
           authStatus: 'authenticated',
           isAuthenticated: true
         });

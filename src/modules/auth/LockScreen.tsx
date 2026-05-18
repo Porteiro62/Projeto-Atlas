@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useFinanceStore } from '../../store/useFinanceStore';
+import { browserSupportsWebAuthn, platformAuthenticatorIsAvailable } from '@simplewebauthn/browser';
 import { Lock, User, KeyRound, ArrowRight, Fingerprint, Shield, AlertCircle } from 'lucide-react';
+import { useFinanceStore } from '../../store/useFinanceStore';
+import logoImg from '../../assets/logo.png';
 
 export function LockScreen() {
   const { authStatus, registerUser, loginUser, loginWithWindowsHello } = useFinanceStore();
@@ -10,31 +12,54 @@ export function LockScreen() {
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [canUseWindowsHello, setCanUseWindowsHello] = useState(false);
 
-  // Automatically trigger Windows Hello when the lock screen mounts in locked state
   useEffect(() => {
-    if (authStatus === 'locked') {
-      setTimeout(triggerBiometrics, 600); // Give layout animation a brief moment to settle
-    }
+    let mounted = true;
+
+    const checkAvailability = async () => {
+      const isAvailable =
+        browserSupportsWebAuthn() &&
+        (await platformAuthenticatorIsAvailable()) &&
+        Boolean(window.electronAPI) &&
+        (await window.electronAPI.safeStorageIsAvailable());
+
+      if (mounted) {
+        setCanUseWindowsHello(isAvailable);
+      }
+    };
+
+    checkAvailability().catch(() => {
+      if (mounted) {
+        setCanUseWindowsHello(false);
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
   }, [authStatus]);
 
-  const triggerBiometrics = async () => {
+  const handleManualUnlock = async () => {
     setError('');
+    setIsSubmitting(true);
+
     try {
       const success = await loginWithWindowsHello();
       if (!success) {
-        console.log("[LockScreen] Biometric verification canceled or not configured on machine.");
+        setError('Falha ao validar o Windows Hello. Use o PIN ou tente novamente.');
       }
     } catch (e) {
-      console.error("[LockScreen] Error triggering Windows Hello biometrics:", e);
+      setError('Falha no Windows Hello. Use o PIN.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handlePinChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '').slice(0, 4);
     setPin(value);
-    
-    // Auto-submit once 4 digits are typed
+
     if (value.length === 4) {
       setError('');
       setIsSubmitting(true);
@@ -52,21 +77,26 @@ export function LockScreen() {
     setError('');
 
     if (!name.trim() || !username.trim()) {
-      setError('Por favor, preencha todos os campos.');
+      setError('Preencha todos os campos.');
       return;
     }
 
     if (pin.length !== 4) {
-      setError('O PIN deve possuir exatamente 4 dígitos.');
+      setError('O PIN deve possuir exatamente 4 digitos.');
+      return;
+    }
+
+    if (!canUseWindowsHello) {
+      setError('Windows Hello indisponivel neste dispositivo.');
       return;
     }
 
     setIsSubmitting(true);
     const success = await registerUser(name.trim(), username.trim(), pin);
     setIsSubmitting(false);
-    
+
     if (!success) {
-      setError('Falha ao inicializar perfil criptografado. Tente novamente.');
+      setError('Falha ao registrar a credencial do Windows Hello.');
     }
   };
 
@@ -75,7 +105,7 @@ export function LockScreen() {
       <div className="fixed inset-0 bg-stone-950 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-atlas-emerald border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-[10px] text-stone-500 font-bold uppercase tracking-widest animate-pulse">Protegendo Sessão...</span>
+          <span className="text-[10px] text-stone-500 font-bold uppercase tracking-widest animate-pulse">Protegendo sessao...</span>
         </div>
       </div>
     );
@@ -85,7 +115,6 @@ export function LockScreen() {
 
   return (
     <div className="fixed inset-0 bg-atlas-dark flex overflow-hidden select-none">
-      {/* Esquerda: Formulário de Onboarding ou PIN-Lock */}
       <motion.div
         initial={{ x: -100, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
@@ -93,21 +122,18 @@ export function LockScreen() {
         className="w-full lg:w-[480px] bg-white h-full shadow-2xl z-10 flex flex-col justify-center px-12 relative"
       >
         <div className="absolute top-12 left-12 flex items-center gap-3">
-          <div className="w-10 h-10 bg-atlas-dark rounded-xl flex items-center justify-center">
-            <div className="w-4 h-4 bg-atlas-emerald rounded-sm rotate-45"></div>
-          </div>
-          <span className="text-xl font-black text-atlas-dark tracking-tighter uppercase italic">Atlas</span>
+          <span className="text-xl font-black tracking-tighter uppercase italic" style={{ color: '#030712' }}></span>
         </div>
 
         <div className="max-w-sm w-full mx-auto">
           <header className="mb-8">
             <h1 className="text-4xl font-black text-stone-900 tracking-tight mb-2">
-              {isRegistering ? 'Criar Perfil' : 'Atlas Protegido'}
+              {isRegistering ? 'Criar Perfil' : 'ATLAS'}
             </h1>
             <p className="text-stone-400 text-xs font-semibold leading-relaxed">
               {isRegistering
-                ? 'Defina suas credenciais locais. Seus dados financeiros serão criptografados e salvos 100% offline.'
-                : 'Insira seu PIN de segurança ou utilize a autenticação nativa do Windows Hello.'}
+                ? 'Defina suas credenciais locais. O cadastro exigira Windows Hello e mantera seus dados offline.'
+                : 'Financieiro'}
             </p>
           </header>
 
@@ -123,7 +149,7 @@ export function LockScreen() {
               >
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-2">
-                    <User size={12} /> Nome Completo
+                    <User size={12} /> Nome completo
                   </label>
                   <input
                     type="text"
@@ -138,7 +164,7 @@ export function LockScreen() {
 
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-2">
-                    <User size={12} /> Nome de Usuário (Username)
+                    <User size={12} /> Nome de usuario
                   </label>
                   <input
                     type="text"
@@ -154,9 +180,9 @@ export function LockScreen() {
                 <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
                     <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-2">
-                      <KeyRound size={12} /> DEFINIR PIN DE ACESSO
+                      <KeyRound size={12} /> Definir PIN de acesso
                     </label>
-                    <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">4 DÍGITOS</span>
+                    <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">4 DIGITOS</span>
                   </div>
                   <input
                     type="password"
@@ -166,9 +192,15 @@ export function LockScreen() {
                     value={pin}
                     onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                     className="w-full bg-stone-50 border border-stone-200 rounded-2xl px-5 py-4 text-stone-900 font-bold text-2xl tracking-[1.5em] text-center focus:ring-2 focus:ring-atlas-emerald/20 border-focus:border-atlas-emerald outline-none transition-all placeholder:text-stone-200"
-                    placeholder="••••"
+                    placeholder="...."
                   />
                 </div>
+
+                {!canUseWindowsHello && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] font-semibold text-amber-800">
+                    Windows Hello nao esta disponivel. Configure biometria ou PIN do Windows para concluir o cadastro.
+                  </div>
+                )}
 
                 {error && (
                   <motion.div
@@ -183,10 +215,11 @@ export function LockScreen() {
 
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-atlas-dark hover:bg-atlas-teal text-white py-5 rounded-2xl font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-3 transition-all shadow-xl shadow-black/10 active:scale-[0.98] group disabled:opacity-50"
+                  disabled={isSubmitting || !canUseWindowsHello}
+                  className="w-full text-white py-5 rounded-2xl font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-3 transition-all shadow-xl shadow-black/10 active:scale-[0.98] group disabled:opacity-50 hover:opacity-90"
+                  style={{ background: '#030712' }}
                 >
-                  {isSubmitting ? 'Configurando...' : 'Finalizar e Criptografar'}
+                  {isSubmitting ? 'Configurando...' : 'Vincular ao Windows Hello'}
                   <ArrowRight size={18} className="text-atlas-emerald group-hover:translate-x-1 transition-transform" />
                 </button>
               </motion.form>
@@ -199,21 +232,21 @@ export function LockScreen() {
                 className="space-y-6"
               >
                 <div className="flex flex-col items-center py-2">
-                  <div className="w-16 h-16 bg-atlas-dark/5 border border-stone-200 rounded-3xl flex items-center justify-center relative mb-4">
+                  <div className="w-16 h-16 border border-stone-200 rounded-3xl flex items-center justify-center relative mb-4" style={{ background: 'rgba(2, 9, 30, 0.05)' }}>
                     <Lock className="text-stone-700" size={24} />
                     <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-atlas-emerald rounded-full flex items-center justify-center border-2 border-white">
                       <Shield size={8} className="text-white fill-white" />
                     </span>
                   </div>
-                  <span className="text-[10px] text-atlas-emerald font-black uppercase tracking-[0.2em]">Banco Criptografado</span>
+                  <span className="text-[10px] text-atlas-emerald font-black uppercase tracking-[0.2em]"> criptografado</span>
                 </div>
 
                 <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
                     <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-2">
-                      <KeyRound size={12} /> INSIRA SEU PIN
+                      <KeyRound size={12} /> Insira seu PIN
                     </label>
-                    <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">4 DÍGITOS</span>
+                    <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">4 DIGITOS</span>
                   </div>
                   <input
                     type="password"
@@ -224,7 +257,7 @@ export function LockScreen() {
                     value={pin}
                     onChange={handlePinChange}
                     className="w-full bg-stone-50 border border-stone-200 rounded-2xl px-5 py-4 text-stone-900 font-bold text-2xl tracking-[1.5em] text-center focus:ring-2 focus:ring-atlas-emerald/20 border-focus:border-atlas-emerald outline-none transition-all placeholder:text-stone-200"
-                    placeholder="••••"
+                    placeholder="...."
                   />
                 </div>
 
@@ -236,12 +269,12 @@ export function LockScreen() {
 
                 <button
                   type="button"
-                  onClick={triggerBiometrics}
-                  disabled={isSubmitting}
+                  onClick={handleManualUnlock}
+                  disabled={isSubmitting || !canUseWindowsHello}
                   className="w-full border border-stone-200 hover:border-atlas-emerald/40 hover:bg-atlas-emerald/5 text-stone-700 py-4 rounded-2xl font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-3 transition-all hover:text-atlas-emerald disabled:opacity-50"
                 >
                   <Fingerprint size={18} />
-                  Usar Windows Hello
+                  {canUseWindowsHello ? 'Windows Hello' : 'Windows Hello indisponivel'}
                 </button>
 
                 {error && (
@@ -264,50 +297,24 @@ export function LockScreen() {
         </footer>
       </motion.div>
 
-      {/* Direita: Branding & Detalhes de Segurança (Desktop) */}
-      <div className="flex-1 bg-atlas-dark relative overflow-hidden hidden lg:flex items-center justify-center">
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_30%_20%,#26D0A8_0%,transparent_50%)]"></div>
-          <div className="absolute bottom-0 right-0 w-full h-full bg-[radial-gradient(circle_at_70%_80%,#0F3D3E_0%,transparent_50%)]"></div>
+      <div className="flex-1 relative overflow-hidden hidden lg:flex items-center justify-center" style={{ background: '#030712' }}>
+        <div className="absolute inset-0 opacity-30">
+          <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_30%_20%,rgba(38,208,168,0.12)_0%,transparent_40%)]"></div>
+          <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.03)_0%,transparent_45%,rgba(38,208,168,0.04)_100%)]"></div>
         </div>
 
-        <div className="relative z-10 text-center px-12 max-w-lg">
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 1 }}
-            className="w-48 h-48 bg-white/5 backdrop-blur-3xl rounded-[48px] border border-white/10 flex items-center justify-center mb-10 mx-auto shadow-2xl overflow-hidden group relative"
-          >
-            <div className="w-24 h-24 bg-atlas-emerald rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity"></div>
-            <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-atlas-emerald/10 to-transparent"></div>
-            <div className="w-16 h-16 bg-atlas-dark rounded-2xl flex items-center justify-center shadow-2xl relative z-10 border border-white/10">
-              <div className="w-6 h-6 bg-atlas-emerald rounded-sm rotate-45 shadow-[0_0_20px_rgba(38,208,168,0.5)]"></div>
-            </div>
-            
-            {/* Visual biometric pulse animation in locked state */}
-            {!isRegistering && (
-              <div className="absolute inset-0 border border-atlas-emerald/20 rounded-[48px] animate-ping opacity-30 pointer-events-none scale-90"></div>
-            )}
-          </motion.div>
-          
-          <h2 className="text-3xl font-black text-white tracking-tighter mb-4 leading-tight uppercase">
-            {isRegistering ? 'Segurança e Controle\n100% Offline.' : 'Seus Dados Patrimoniais\nFortificados.'}
-          </h2>
-          <p className="text-stone-400 font-bold uppercase tracking-[0.25em] text-[10px] mb-8 leading-relaxed">
-            {isRegistering 
-              ? 'Uma chave mestra AES-256 de alta entropia será gerada na sua máquina e vinculada ao Windows Hello (DPAPI).' 
-              : 'O banco de dados SQLite está criptografado no disco. Autentique-se para liberar a chave mestra na memória.'}
-          </p>
-
-          <div className="inline-flex items-center gap-3 bg-white/5 border border-white/10 rounded-full px-5 py-2.5 backdrop-blur-md">
-            <span className="w-2 h-2 rounded-full bg-atlas-emerald animate-pulse"></span>
-            <span className="text-[10px] text-atlas-emerald font-black uppercase tracking-wider">Criptografia AES-256-GCM + Windows DPAPI</span>
+        <motion.div
+          initial={{ scale: 0.92, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.9 }}
+          className="relative z-10 flex flex-col items-center text-center"
+        >
+          <div className="w-[28rem] max-w-[80%]">
+            <img src={logoImg} alt="Atlas" className="w-full h-auto" />
           </div>
-        </div>
-
-        {/* Decorative elements */}
-        <div className="absolute top-1/4 right-20 w-48 h-32 bg-white/5 border border-white/10 rounded-3xl backdrop-blur-md -rotate-12 animate-pulse"></div>
-        <div className="absolute bottom-1/4 left-10 w-40 h-40 bg-white/5 border border-white/10 rounded-[40px] backdrop-blur-md rotate-12"></div>
+          <p className="mt-3 text-sm font-bold uppercase tracking-[0.45em] text-stone-400">financeiro</p>
+          <p className="mt-3 text-sm font-bold uppercase tracking-[0.45em] text-stone-400">by - porteiro62</p>
+        </motion.div>
       </div>
     </div>
   );

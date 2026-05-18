@@ -70,7 +70,7 @@ function createWindow() {
     height: 800,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#1c1917', // bg-stone-900
+      color: '#030712',
       symbolColor: '#a8a29e', // text-stone-400
       height: 40
     },
@@ -79,7 +79,7 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.cjs'),
     },
-    icon: path.join(__dirname, '../public/icon.png') // Assume an icon exists
+    icon: path.join(__dirname, '../public/icon.ico')
   });
 
   // Wait for server to be ready (hardcoded delay or health check)
@@ -160,6 +160,10 @@ ipcMain.handle('safe-storage-is-available', () => {
   return safeStorage.isEncryptionAvailable();
 });
 
+ipcMain.handle('app-version', () => {
+  return app.getVersion();
+});
+
 app.whenReady().then(() => {
   startServer();
   createWindow();
@@ -175,8 +179,28 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('before-quit', () => {
-  if (serverProcess) {
-    serverProcess.kill();
+app.on('before-quit', (event) => {
+  if (serverProcess && serverProcess.connected) {
+    event.preventDefault(); // Prevent quitting until server shuts down gracefully
+
+    console.log('[Electron] Sending graceful shutdown to server via IPC...');
+    serverProcess.send('shutdown');
+
+    // Safety timeout: if the server doesn't exit within 5 seconds, force kill it
+    const forceKillTimeout = setTimeout(() => {
+      console.log('[Electron] Server did not exit in time. Force killing...');
+      try {
+        serverProcess?.kill();
+      } catch (e) {}
+      serverProcess = null;
+      app.quit();
+    }, 5000);
+
+    serverProcess.on('exit', () => {
+      clearTimeout(forceKillTimeout);
+      console.log('[Electron] Server process exited gracefully.');
+      serverProcess = null;
+      app.quit();
+    });
   }
 });

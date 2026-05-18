@@ -248,8 +248,8 @@ export function Dashboard() {
         </div>
 
         {/* Financing Progress */}
-        <div className="bg-atlas-dark p-8 rounded-3xl text-atlas-cream shadow-2xl flex flex-col justify-between relative overflow-hidden border border-atlas-teal/30">
-          <div className="absolute top-0 right-0 p-6 opacity-10">
+        <div className="bg-white p-8 rounded-3xl text-stone-900 shadow-sm flex flex-col justify-between relative overflow-hidden border border-stone-200">
+          <div className="absolute top-0 right-0 p-6 opacity-[0.06] text-stone-900">
             <Target size={120} />
           </div>
           
@@ -259,15 +259,15 @@ export function Dashboard() {
               <h4 className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">Meta Patrimonial</h4>
             </div>
             
-            <h3 className="text-4xl font-bold mb-2 tracking-tight text-white">
+            <h3 className="text-4xl font-bold mb-2 tracking-tight text-stone-900">
               {financingProgress.toFixed(1)}%
             </h3>
-            <p className="text-xs text-stone-400 font-medium leading-relaxed mb-8">
+            <p className="text-xs text-stone-500 font-medium leading-relaxed mb-8">
               Você já acumulou {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financingContributions)} para sua meta imobiliária.
             </p>
 
             <div className="space-y-4">
-              <div className="w-full h-1.5 bg-atlas-teal/30 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-atlas-emerald transition-all duration-1000 shadow-[0_0_10px_rgba(38,208,168,0.4)]"
                   style={{ width: `${financingProgress}%` }}
@@ -280,7 +280,7 @@ export function Dashboard() {
             </div>
           </div>
 
-          <button className="relative z-10 mt-8 w-full py-3 bg-atlas-teal text-atlas-emerald border border-atlas-emerald/20 rounded-2xl font-bold text-xs hover:bg-atlas-emerald hover:text-atlas-dark transition-all active:scale-95 shadow-lg shadow-black/20">
+          <button className="relative z-10 mt-8 w-full py-3 bg-stone-900 text-white border border-stone-900 rounded-2xl font-bold text-xs hover:bg-stone-800 transition-all active:scale-95 shadow-sm">
             Gerenciar Meta
           </button>
         </div>

@@ -47,6 +47,24 @@ let sqliteInstance: any = null;
 let drizzleInstance: any = null;
 let activeMasterKey: Buffer | null = null;
 
+export interface StoredWebAuthnCredential {
+  id: string;
+  publicKey: string;
+  counter: number;
+  transports?: string[];
+  deviceType?: string;
+  backedUp?: boolean;
+}
+
+export interface AuthConfig {
+  name: string;
+  username: string;
+  pinHash: string;
+  salt: string;
+  masterKeyEncrypted: string;
+  webauthnCredential?: StoredWebAuthnCredential;
+}
+
 /**
  * Database Access Proxy.
  * Acts as the same 'db' instance imported throughout the application.
@@ -69,7 +87,7 @@ export function isDatabaseRegistered(): boolean {
   return fs.existsSync(authConfigPath);
 }
 
-export function getAuthConfig(): any {
+export function getAuthConfig(): AuthConfig | null {
   if (!isDatabaseRegistered()) return null;
   try {
     return JSON.parse(fs.readFileSync(authConfigPath, 'utf8'));
@@ -79,7 +97,7 @@ export function getAuthConfig(): any {
   }
 }
 
-export function saveAuthConfig(config: any) {
+export function saveAuthConfig(config: AuthConfig) {
   fs.writeFileSync(authConfigPath, JSON.stringify(config, null, 2), 'utf8');
 }
 

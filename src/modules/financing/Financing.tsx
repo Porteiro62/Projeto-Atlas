@@ -117,7 +117,7 @@ export function FinancingModule() {
           </button>
           <button 
             onClick={() => setIsFormOpen(true)}
-            className="flex items-center gap-2 bg-atlas-dark hover:bg-atlas-teal text-white px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-black/20 font-bold text-sm border border-atlas-emerald/20 h-[42px]"
+            className="flex items-center gap-2 bg-stone-900 hover:bg-stone-800 text-white px-6 py-2.5 rounded-xl transition-all shadow-sm font-bold text-sm border border-stone-900 h-[42px]"
           >
             <Plus size={20} className="text-atlas-emerald" />
             Registrar Aporte
@@ -249,12 +249,12 @@ export function FinancingModule() {
         </div>
 
         <div className="space-y-6">
-          <div className="bg-atlas-dark p-8 rounded-3xl text-atlas-cream shadow-2xl relative overflow-hidden border border-atlas-teal/30">
-            <div className="absolute top-0 right-0 p-4 opacity-10">
+          <div className="bg-white p-8 rounded-3xl text-stone-900 shadow-sm relative overflow-hidden border border-stone-200">
+            <div className="absolute top-0 right-0 p-4 opacity-[0.06] text-stone-900">
               <Calendar size={80} />
             </div>
             <Activity className="mb-6 text-atlas-emerald" size={32} />
-            <h4 className="text-lg font-bold mb-3 tracking-tight text-white">Quitação Prevista</h4>
+            <h4 className="text-lg font-bold mb-3 tracking-tight text-stone-900">Quitação Prevista</h4>
             <div className="space-y-4">
               <div>
                 <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1">Parcelas Restantes</p>
@@ -262,13 +262,13 @@ export function FinancingModule() {
                   {installmentsRemaining} <span className="text-sm text-stone-400 font-bold">meses</span>
                 </p>
               </div>
-              <div className="pt-2 border-t border-white/10">
+              <div className="pt-2 border-t border-stone-200">
                 <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1">Encerramento em</p>
-                <p className="text-2xl font-bold text-white">
+                <p className="text-2xl font-bold text-stone-900">
                   {format(completionDate, 'MMMM yyyy', { locale: ptBR })}
                 </p>
               </div>
-              <p className="text-xs text-stone-400 leading-relaxed font-medium">
+              <p className="text-xs text-stone-500 leading-relaxed font-medium">
                 Com base no aporte fixado de {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financingMeta.monthlyInstallment)}, você alcançará o objetivo em {completionDate.getFullYear()}.
               </p>
             </div>

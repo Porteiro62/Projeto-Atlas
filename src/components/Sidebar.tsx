@@ -21,9 +21,10 @@ function cn(...inputs: ClassValue[]) {
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  appVersion: string | null;
 }
 
-export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
+export function Sidebar({ activeTab, setActiveTab, appVersion }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Panorama', icon: LayoutDashboard },
     { id: 'transactions', label: 'Histórico', icon: ListOrdered },
@@ -59,7 +60,7 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
 
       <div className="p-6 border-t border-atlas-teal/20">
         <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest text-center opacity-40">
-          v1.4.2
+          {appVersion ? `v${appVersion}` : '...'}
         </p>
       </div>
     </aside>

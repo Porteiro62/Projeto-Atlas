@@ -53,5 +53,6 @@ import_electron.contextBridge.exposeInMainWorld("electronAPI", {
   // Safe Storage
   safeStorageEncrypt: (plainText) => import_electron.ipcRenderer.invoke("safe-storage-encrypt", plainText),
   safeStorageDecrypt: (base64Text) => import_electron.ipcRenderer.invoke("safe-storage-decrypt", base64Text),
-  safeStorageIsAvailable: () => import_electron.ipcRenderer.invoke("safe-storage-is-available")
+  safeStorageIsAvailable: () => import_electron.ipcRenderer.invoke("safe-storage-is-available"),
+  getAppVersion: () => import_electron.ipcRenderer.invoke("app-version")
 });

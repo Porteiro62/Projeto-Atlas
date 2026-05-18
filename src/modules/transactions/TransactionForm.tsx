@@ -97,7 +97,7 @@ export function TransactionForm({ onClose, initialType, initialData }: { onClose
   return (
     <div className="fixed inset-0 bg-atlas-dark/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white border border-atlas-teal/20 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
-        <header className="p-6 border-b border-stone-100 flex items-center justify-between bg-atlas-dark text-white">
+        <header className="p-6 border-b border-stone-100 flex items-center justify-between bg-stone-900 text-white">
           <div>
             <h3 className="text-xl font-bold tracking-tight">{isEditing ? 'Editar Transação' : 'Nova Transação'}</h3>
             <p className="text-[10px] text-atlas-emerald uppercase font-bold tracking-[2px]">Atlas Financeiro</p>
@@ -226,7 +226,7 @@ export function TransactionForm({ onClose, initialType, initialData }: { onClose
             <button 
               type="submit" 
               disabled={loading}
-              className="flex-1 px-4 py-3 bg-atlas-dark hover:bg-atlas-teal text-white rounded-2xl font-bold text-xs uppercase tracking-widest transition-all shadow-lg shadow-black/20 flex items-center justify-center gap-2 border border-atlas-emerald/20"
+              className="flex-1 px-4 py-3 bg-stone-900 hover:bg-stone-800 text-white rounded-2xl font-bold text-xs uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 border border-stone-900"
             >
               <Save size={18} className="text-atlas-emerald" />
               {loading ? 'Salvando...' : 'Confirmar'}

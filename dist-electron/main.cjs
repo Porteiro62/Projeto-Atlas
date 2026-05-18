@@ -222,8 +222,7 @@ function createWindow() {
     height: 800,
     titleBarStyle: "hidden",
     titleBarOverlay: {
-      color: "#1c1917",
-      // bg-stone-900
+      color: "#030712",
       symbolColor: "#a8a29e",
       // text-stone-400
       height: 40
@@ -294,6 +293,9 @@ import_electron2.ipcMain.handle("safe-storage-decrypt", (event, base64Text) => {
 import_electron2.ipcMain.handle("safe-storage-is-available", () => {
   return import_electron2.safeStorage.isEncryptionAvailable();
 });
+import_electron2.ipcMain.handle("app-version", () => {
+  return import_electron2.app.getVersion();
+});
 import_electron2.app.whenReady().then(() => {
   startServer();
   createWindow();
@@ -306,8 +308,25 @@ import_electron2.app.on("window-all-closed", () => {
     import_electron2.app.quit();
   }
 });
-import_electron2.app.on("before-quit", () => {
-  if (serverProcess) {
-    serverProcess.kill();
+import_electron2.app.on("before-quit", (event) => {
+  if (serverProcess && serverProcess.connected) {
+    event.preventDefault();
+    console.log("[Electron] Sending graceful shutdown to server via IPC...");
+    serverProcess.send("shutdown");
+    const forceKillTimeout = setTimeout(() => {
+      console.log("[Electron] Server did not exit in time. Force killing...");
+      try {
+        serverProcess?.kill();
+      } catch (e) {
+      }
+      serverProcess = null;
+      import_electron2.app.quit();
+    }, 5e3);
+    serverProcess.on("exit", () => {
+      clearTimeout(forceKillTimeout);
+      console.log("[Electron] Server process exited gracefully.");
+      serverProcess = null;
+      import_electron2.app.quit();
+    });
   }
 });

@@ -1,12 +1,62 @@
 import express from "express";
 import path from "path";
-import { db, isDatabaseUnlocked, isDatabaseRegistered, getAuthConfig, saveAuthConfig, unlockDatabase, lockDatabase } from "./src/database/db.ts";
+import { db, isDatabaseUnlocked, isDatabaseRegistered, getAuthConfig, saveAuthConfig, unlockDatabase, lockDatabase, type StoredWebAuthnCredential } from "./src/database/db.ts";
 import { hashPin } from "./src/utils/crypto.ts";
 import crypto from "node:crypto";
 import { transactions, creditCards, financings } from "./src/database/schema.ts";
 import { eq, desc, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
+import {
+  generateAuthenticationOptions,
+  generateRegistrationOptions,
+  verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+  type AuthenticationResponseJSON,
+  type RegistrationResponseJSON,
+  type WebAuthnCredential,
+} from "@simplewebauthn/server";
 import "dotenv/config";
+
+const RP_ID = "localhost";
+const RP_NAME = "Atlas";
+const EXPECTED_ORIGIN = "http://localhost:3000";
+const MAX_PIN_ATTEMPTS = 5;
+const LOCKOUT_WINDOW_MS = 5 * 60 * 1000;
+
+let currentRegistrationChallenge: string | null = null;
+let currentAuthenticationChallenge: string | null = null;
+let failedPinAttempts = 0;
+let pinLockUntil = 0;
+
+function toWebAuthnCredential(
+  credential: StoredWebAuthnCredential | undefined,
+): WebAuthnCredential | null {
+  if (!credential) return null;
+
+  return {
+    id: credential.id,
+    publicKey: new Uint8Array(Buffer.from(credential.publicKey, "base64url")),
+    counter: credential.counter,
+    transports: credential.transports as WebAuthnCredential["transports"],
+  };
+}
+
+function isPinLocked(): boolean {
+  return pinLockUntil > Date.now();
+}
+
+function recordFailedPinAttempt() {
+  failedPinAttempts += 1;
+  if (failedPinAttempts >= MAX_PIN_ATTEMPTS) {
+    pinLockUntil = Date.now() + LOCKOUT_WINDOW_MS;
+    failedPinAttempts = 0;
+  }
+}
+
+function clearPinFailures() {
+  failedPinAttempts = 0;
+  pinLockUntil = 0;
+}
 
 // Auto-lock database on server process termination
 const cleanup = () => {
@@ -25,6 +75,22 @@ process.on("exit", () => {
   try {
     lockDatabase();
   } catch (e) {}
+});
+
+// Graceful shutdown via IPC message from Electron main process.
+// On Windows, SIGTERM/SIGINT don't work reliably for child processes,
+// so Electron sends an IPC 'shutdown' message instead.
+process.on("message", (msg) => {
+  if (msg === "shutdown") {
+    console.log("[Server] Graceful shutdown requested via IPC. Locking database...");
+    try {
+      lockDatabase();
+      console.log("[Server] Database locked successfully. Exiting.");
+    } catch (e) {
+      console.error("[Server] Failed to lock database on shutdown:", e);
+    }
+    process.exit(0);
+  }
 });
 
 async function startServer() {
@@ -65,10 +131,42 @@ async function startServer() {
         const config = getAuthConfig();
         res.json({ 
           registered: true, 
-          salt: config.salt, 
-          masterKeyEncrypted: config.masterKeyEncrypted 
+          windowsHelloRegistered: Boolean(config?.webauthnCredential),
+          username: config?.username ?? null,
         });
       } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.post("/api/auth/webauthn/register/options", async (req, res) => {
+      try {
+        const { name, username } = req.body;
+        if (!name || !username) {
+          return res.status(400).json({ error: "Missing required registration parameters." });
+        }
+        if (isDatabaseRegistered()) {
+          return res.status(409).json({ error: "A user is already registered." });
+        }
+
+        const options = await generateRegistrationOptions({
+          rpName: RP_NAME,
+          rpID: RP_ID,
+          userName: username,
+          userDisplayName: name,
+          attestationType: "none",
+          preferredAuthenticatorType: "localDevice",
+          authenticatorSelection: {
+            authenticatorAttachment: "platform",
+            residentKey: "preferred",
+            userVerification: "required",
+          },
+        });
+
+        currentRegistrationChallenge = options.challenge;
+        res.json(options);
+      } catch (err: any) {
+        console.error("Error generating WebAuthn registration options:", err);
         res.status(500).json({ error: err.message });
       }
     });
@@ -103,6 +201,103 @@ async function startServer() {
       }
     });
 
+    app.post("/api/auth/webauthn/register/verify", async (req, res) => {
+      try {
+        const { name, username, pin, masterKeyEncrypted, masterKeyRaw, response } = req.body as {
+          name?: string;
+          username?: string;
+          pin?: string;
+          masterKeyEncrypted?: string;
+          masterKeyRaw?: string;
+          response?: RegistrationResponseJSON;
+        };
+
+        if (!name || !username || !pin || !masterKeyEncrypted || !masterKeyRaw || !response) {
+          return res.status(400).json({ error: "Missing required registration parameters." });
+        }
+        if (!currentRegistrationChallenge) {
+          return res.status(400).json({ error: "Registration challenge not initialized." });
+        }
+        if (isDatabaseRegistered()) {
+          return res.status(409).json({ error: "A user is already registered." });
+        }
+
+        const verification = await verifyRegistrationResponse({
+          response,
+          expectedChallenge: currentRegistrationChallenge,
+          expectedOrigin: EXPECTED_ORIGIN,
+          expectedRPID: RP_ID,
+          requireUserVerification: true,
+        });
+
+        currentRegistrationChallenge = null;
+
+        if (!verification.verified || !verification.registrationInfo) {
+          return res.status(401).json({ error: "WEBAUTHN_REGISTRATION_FAILED" });
+        }
+
+        const salt = crypto.randomBytes(16).toString("hex");
+        const pinHash = hashPin(pin, salt);
+        const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+
+        saveAuthConfig({
+          name,
+          username,
+          pinHash,
+          salt,
+          masterKeyEncrypted,
+          webauthnCredential: {
+            id: credential.id,
+            publicKey: Buffer.from(credential.publicKey).toString("base64url"),
+            counter: credential.counter,
+            transports: credential.transports,
+            deviceType: credentialDeviceType,
+            backedUp: credentialBackedUp,
+          },
+        });
+
+        unlockDatabase(masterKeyRaw);
+        clearPinFailures();
+
+        res.status(201).json({ success: true });
+      } catch (err: any) {
+        currentRegistrationChallenge = null;
+        console.error("Error verifying WebAuthn registration:", err);
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.get("/api/auth/webauthn/login/options", async (req, res) => {
+      try {
+        if (!isDatabaseRegistered()) {
+          return res.status(400).json({ error: "No user is registered." });
+        }
+
+        const config = getAuthConfig();
+        const credential = config?.webauthnCredential;
+        if (!credential) {
+          return res.status(400).json({ error: "WINDOWS_HELLO_NOT_CONFIGURED" });
+        }
+
+        const options = await generateAuthenticationOptions({
+          rpID: RP_ID,
+          userVerification: "required",
+          allowCredentials: [
+            {
+              id: credential.id,
+              transports: credential.transports as WebAuthnCredential["transports"],
+            },
+          ],
+        });
+
+        currentAuthenticationChallenge = options.challenge;
+        res.json(options);
+      } catch (err: any) {
+        console.error("Error generating WebAuthn authentication options:", err);
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     app.post("/api/auth/login", (req, res) => {
       try {
         const { pin } = req.body;
@@ -110,11 +305,21 @@ async function startServer() {
         if (!isDatabaseRegistered()) {
           return res.status(400).json({ error: "No user is registered." });
         }
+        if (isPinLocked()) {
+          return res.status(429).json({
+            error: "PIN_LOCKED",
+            message: "Muitas tentativas de PIN. Aguarde alguns minutos antes de tentar novamente.",
+          });
+        }
 
         const config = getAuthConfig();
+        if (!config) {
+          return res.status(500).json({ error: "Auth config not found." });
+        }
         const pinHash = hashPin(pin, config.salt);
 
         if (pinHash === config.pinHash) {
+          clearPinFailures();
           res.json({
             success: true,
             name: config.name,
@@ -122,10 +327,68 @@ async function startServer() {
             masterKeyEncrypted: config.masterKeyEncrypted
           });
         } else {
+          recordFailedPinAttempt();
           res.status(401).json({ error: "PIN_INCORRECT", message: "PIN incorreto." });
         }
       } catch (err: any) {
         res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.post("/api/auth/webauthn/login/verify", async (req, res) => {
+      try {
+        const { response } = req.body as { response?: AuthenticationResponseJSON };
+        if (!response) {
+          return res.status(400).json({ error: "Missing authentication response." });
+        }
+        if (!currentAuthenticationChallenge) {
+          return res.status(400).json({ error: "Authentication challenge not initialized." });
+        }
+        if (!isDatabaseRegistered()) {
+          return res.status(400).json({ error: "No user is registered." });
+        }
+
+        const config = getAuthConfig();
+        const credential = toWebAuthnCredential(config?.webauthnCredential);
+        if (!config || !credential) {
+          return res.status(400).json({ error: "WINDOWS_HELLO_NOT_CONFIGURED" });
+        }
+
+        const verification = await verifyAuthenticationResponse({
+          response,
+          expectedChallenge: currentAuthenticationChallenge,
+          expectedOrigin: EXPECTED_ORIGIN,
+          expectedRPID: RP_ID,
+          credential,
+          requireUserVerification: true,
+        });
+
+        currentAuthenticationChallenge = null;
+
+        if (!verification.verified) {
+          return res.status(401).json({ error: "WEBAUTHN_AUTH_FAILED" });
+        }
+
+        saveAuthConfig({
+          ...config,
+          webauthnCredential: {
+            ...config.webauthnCredential!,
+            counter: verification.authenticationInfo.newCounter,
+            deviceType: verification.authenticationInfo.credentialDeviceType,
+            backedUp: verification.authenticationInfo.credentialBackedUp,
+          },
+        });
+
+        res.json({
+          success: true,
+          name: config.name,
+          username: config.username,
+          masterKeyEncrypted: config.masterKeyEncrypted,
+        });
+      } catch (err: any) {
+        currentAuthenticationChallenge = null;
+        console.error("Error verifying WebAuthn authentication:", err);
+        res.status(401).json({ error: "WEBAUTHN_AUTH_FAILED", message: err.message });
       }
     });
 

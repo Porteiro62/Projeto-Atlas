@@ -31,6 +31,7 @@ export interface ElectronAPI {
   safeStorageEncrypt: (plainText: string) => Promise<string>;
   safeStorageDecrypt: (base64Text: string) => Promise<string>;
   safeStorageIsAvailable: () => Promise<boolean>;
+  getAppVersion: () => Promise<string>;
 }
 
 declare global {
