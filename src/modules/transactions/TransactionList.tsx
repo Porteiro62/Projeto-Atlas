@@ -183,7 +183,7 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
               </div>
               <div>
                 <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest">Fatura Estimada</p>
-                <h3 className="text-3xl font-bold text-stone-900 tracking-tight">
+                <h3 className="text-3xl font-bold text-rose-500 tracking-tight">
                   {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditCardTotal)}
                 </h3>
               </div>
@@ -205,7 +205,7 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-stone-500">Gasto Atual</span>
-                <span className="font-bold text-stone-900">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditCardTotal)}</span>
+                <span className="font-bold text-rose-500">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(creditCardTotal)}</span>
               </div>
               <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
                 <div
@@ -289,7 +289,7 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
                     </td>
                     <td className={clsx(
                       "px-6 py-4 text-sm font-bold text-right",
-                      tx.type === 'income' ? "text-atlas-emerald" : "text-stone-900"
+                      (tx.type === 'income' && tx.value >= 0) ? "text-atlas-emerald" : "text-rose-500"
                     )}>
                       {tx.type === 'income' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.value)}
                     </td>

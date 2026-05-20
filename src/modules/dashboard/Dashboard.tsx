@@ -120,6 +120,34 @@ export function Dashboard() {
     });
   }, [transactions, selectedMonth, selectedYear]);
 
+  const annualTotalSummary = useMemo(() => {
+    return annualSummary.reduce((acc, month) => {
+      acc.income += month.income;
+      acc.expense += month.expense;
+      acc.balance += month.balance;
+      return acc;
+    }, {
+      income: 0,
+      expense: 0,
+      balance: 0,
+    });
+  }, [annualSummary]);
+
+  const annualRangeLabel = useMemo(() => {
+    if (annualSummary.length === 0) return 'Últimos 12 meses';
+    const first = annualSummary[0].label;
+    const last = annualSummary[annualSummary.length - 1].label;
+    return `${first} a ${last}`;
+  }, [annualSummary]);
+
+  const annualDetails = useMemo(() => {
+    return [
+      { label: 'Total de receitas', value: annualTotalSummary.income, icon: ArrowUpRight, tone: 'text-atlas-emerald bg-atlas-emerald/10' },
+      { label: 'Total de despesas', value: annualTotalSummary.expense, icon: ArrowDownRight, tone: 'text-rose-500 bg-rose-50' },
+      { label: 'Saldo total', value: annualTotalSummary.balance, icon: Wallet, tone: 'text-stone-900 bg-stone-100' },
+    ];
+  }, [annualTotalSummary]);
+
   const monthlyDetails = [
     { label: 'Total de receitas', value: monthlySummary.income, icon: ArrowUpRight, tone: 'text-atlas-emerald bg-atlas-emerald/10' },
     { label: 'Total de despesas', value: monthlySummary.expense, icon: ArrowDownRight, tone: 'text-rose-500 bg-rose-50' },
@@ -199,7 +227,9 @@ export function Dashboard() {
                   <p className="text-sm text-stone-500">{getMonthLabel(selectedMonth, selectedYear)}</p>
                 </div>
               </div>
-              <p className="text-lg font-bold text-stone-900">{currencyFormatter.format(item.value)}</p>
+              <p className={`text-lg font-bold ${(item.label === 'Total de despesas' || item.value < 0) ? 'text-rose-500' : 'text-stone-900'}`}>
+                {currencyFormatter.format(item.value)}
+              </p>
             </div>
           ))}
         </div>
@@ -212,29 +242,25 @@ export function Dashboard() {
           </div>
           <div>
             <h3 className="text-sm font-bold text-stone-900 uppercase tracking-widest">Panorama Anual</h3>
-            <p className="text-xs text-stone-400 font-medium">Faixa detalhada dos ultimos 12 meses.</p>
+            <p className="text-xs text-stone-400 font-medium">Acumulado dos últimos 12 meses.</p>
           </div>
         </div>
 
-        <div className="space-y-3">
-          {annualSummary.map((item) => (
-            <div key={item.label} className="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-2xl border border-stone-100 px-5 py-4">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Mes</p>
-                <p className="text-sm font-bold text-stone-900">{item.label}</p>
+        <div className="space-y-4">
+          {annualDetails.map((item) => (
+            <div key={item.label} className="flex items-center justify-between rounded-2xl border border-stone-100 bg-stone-50/70 px-5 py-4">
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-2xl ${item.tone}`}>
+                  <item.icon size={18} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">{item.label}</p>
+                  <p className="text-sm text-stone-500">{annualRangeLabel}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Receitas</p>
-                <p className="text-sm font-bold text-atlas-emerald">{currencyFormatter.format(item.income)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Despesas</p>
-                <p className="text-sm font-bold text-rose-500">{currencyFormatter.format(item.expense)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Saldo</p>
-                <p className="text-sm font-bold text-stone-900">{currencyFormatter.format(item.balance)}</p>
-              </div>
+              <p className={`text-lg font-bold ${(item.label === 'Total de despesas' || item.value < 0) ? 'text-rose-500' : 'text-stone-900'}`}>
+                {currencyFormatter.format(item.value)}
+              </p>
             </div>
           ))}
         </div>

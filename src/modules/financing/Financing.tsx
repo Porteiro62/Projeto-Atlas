@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useFinanceStore, Transaction } from '../../store/useFinanceStore';
-import { Home, Target, TrendingUp, Calendar, Plus, ChevronRight, PieChart, Activity, ChevronLeft, Edit2, Trash2 } from 'lucide-react';
+import { Home, Target, TrendingUp, Calendar, Plus, ChevronRight, PieChart, Activity, ChevronLeft, Edit2, Trash2, Download } from 'lucide-react';
 import { TransactionForm } from '../transactions/TransactionForm';
 import { FinancingMetaForm } from './FinancingMetaForm';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { format, parseISO, differenceInMonths, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { clsx } from 'clsx';
+import { exportFinancingReportPdf } from '../../utils/report';
 
 export function FinancingModule() {
   const { transactions, financingMeta, selectedMonth, selectedYear, setDate, fetchTransactions, fetchFinancingMeta, deleteTransaction, deleteAllTransactions } = useFinanceStore();
@@ -53,6 +54,13 @@ export function FinancingModule() {
       title: 'Limpar Aportes',
       message: 'Deseja realmente excluir TODOS os aportes? Esta ação é irreversível.',
       onConfirm: () => deleteAllTransactions('financing')
+    });
+  };
+
+  const handleExportPdf = () => {
+    exportFinancingReportPdf({
+      transactions,
+      financingMeta,
     });
   };
 
@@ -112,6 +120,14 @@ export function FinancingModule() {
           >
             <Trash2 size={18} />
             Limpar Tudo
+          </button>
+
+          <button 
+            onClick={handleExportPdf}
+            className="flex items-center gap-2 bg-white hover:bg-stone-50 text-stone-700 px-6 py-2.5 rounded-xl transition-all border border-stone-200 shadow-sm font-bold text-sm h-[42px]"
+          >
+            <Download size={18} />
+            Emitir PDF
           </button>
 
           <button 

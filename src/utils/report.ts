@@ -1,4 +1,4 @@
-import { format, parseISO, subMonths } from 'date-fns';
+import { format, parseISO, subMonths, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -214,5 +214,133 @@ export function exportFinanceReportPdf(params: {
     },
   });
 
-  doc.save(`atlas-relatorio-${format(generatedAt, 'yyyy-MM-dd-HHmm')}.pdf`);
+  const filename = `atlas-relatorio-${format(generatedAt, 'yyyy-MM-dd-HHmm')}.pdf`;
+  doc.save(filename);
+
+  // Save to notification history on the server asynchronously
+  try {
+    const pdfBase64 = doc.output('datauristring');
+    fetch('/api/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: filename, content: pdfBase64 }),
+    }).catch((err) => console.error('Failed to save report to history:', err));
+  } catch (e) {
+    console.error('Error outputting pdf base64:', e);
+  }
 }
+
+export function exportFinancingReportPdf(params: {
+  transactions: Transaction[];
+  financingMeta: FinancingMeta;
+}) {
+  const { transactions, financingMeta } = params;
+  const doc = new jsPDF();
+  const generatedAt = new Date();
+
+  const initialValue = Number(financingMeta.initialValue) || 0;
+  const target = Number(financingMeta.target) || 0;
+
+  // Filter and sort all financing contributions chronologically
+  const allContributions = transactions
+    .filter((t) => t.type === 'financing')
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // Accumulate contributions up to today
+  const accumulatedSum = transactions
+    .filter((t) => t.type === 'financing' && parseISO(t.date) <= generatedAt)
+    .reduce((sum, t) => sum + t.value, 0);
+
+  const totalAccumulated = accumulatedSum + initialValue;
+  const progressPercent = target > 0 ? (totalAccumulated / target) * 100 : 0;
+  const remaining = Math.max(target - totalAccumulated, 0);
+  const installmentsRemaining = Math.ceil(remaining / (financingMeta.monthlyInstallment || 1));
+  const completionDate = addMonths(new Date(), installmentsRemaining);
+
+  // Header banner
+  doc.setFillColor(15, 23, 42);
+  doc.rect(0, 0, 210, 34, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.text('Atlas - Relatório de Patrimônio', 14, 15);
+  doc.setFontSize(10);
+  doc.text('Extrato de Aportes e Evolução da Meta Patrimonial', 14, 23);
+  doc.setTextColor(148, 163, 184);
+  doc.text(`Gerado em ${format(generatedAt, 'dd/MM/yyyy HH:mm')}`, 14, 29);
+
+  // Resume / Summary Table
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(12);
+  doc.text('Resumo da Meta', 14, 44);
+
+  autoTable(doc, {
+    startY: 48,
+    head: [['Indicador', 'Informação']],
+    body: [
+      ['Valor da Meta', currencyFormatter.format(target)],
+      ['Valor Inicial', currencyFormatter.format(initialValue)],
+      ['Aporte Mensal Fixado', currencyFormatter.format(financingMeta.monthlyInstallment || 0)],
+      ['Total Acumulado (Hoje)', currencyFormatter.format(totalAccumulated)],
+      ['Progresso', `${progressPercent.toFixed(1)}%`],
+      ['Valor Faltante', currencyFormatter.format(remaining)],
+      ['Tempo Estimado', `${installmentsRemaining} parcelas (${format(completionDate, 'MMMM yyyy', { locale: ptBR })})`],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [15, 23, 42] },
+    styles: { fontSize: 9.5 },
+  });
+
+  // Statement Section
+  doc.setFontSize(12);
+  doc.text('Extrato Detalhado de Aportes', 14, (doc as any).lastAutoTable.finalY + 12);
+
+  // Calculate running balance for each contribution
+  let currentRunningBalance = initialValue;
+  const statementBody = allContributions.map((tx) => {
+    currentRunningBalance += tx.value;
+    const isFuture = parseISO(tx.date) > generatedAt;
+
+    return [
+      format(parseISO(tx.date), 'dd/MM/yyyy'),
+      tx.description,
+      tx.recurrence === 'none' ? 'Único' : 'Recorrente',
+      isFuture ? 'Previsto' : 'Realizado',
+      currencyFormatter.format(tx.value),
+      currencyFormatter.format(currentRunningBalance),
+    ];
+  });
+
+  // Add initial balance row if no transactions or as a starting line
+  const tableBody = [
+    ['-', 'Saldo Inicial (Abertura)', '-', '-', '-', currencyFormatter.format(initialValue)],
+    ...statementBody
+  ];
+
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 16,
+    head: [['Data', 'Descrição', 'Recorrência', 'Status', 'Valor do Aporte', 'Saldo Acumulado']],
+    body: tableBody,
+    theme: 'grid',
+    headStyles: { fillColor: [15, 23, 42] },
+    styles: { fontSize: 8.5 },
+    columnStyles: {
+      4: { halign: 'right' },
+    },
+  });
+
+  const filename = `atlas-patrimonio-${format(generatedAt, 'yyyy-MM-dd-HHmm')}.pdf`;
+  doc.save(filename);
+
+  // Save to notification history on the server asynchronously
+  try {
+    const pdfBase64 = doc.output('datauristring');
+    fetch('/api/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: filename, content: pdfBase64 }),
+    }).catch((err) => console.error('Failed to save report to history:', err));
+  } catch (e) {
+    console.error('Error outputting pdf base64:', e);
+  }
+}
+

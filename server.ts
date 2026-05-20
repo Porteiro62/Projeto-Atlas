@@ -1,8 +1,10 @@
 import express from "express";
 import path from "path";
-import { db, isDatabaseUnlocked, isDatabaseRegistered, getAuthConfig, saveAuthConfig, unlockDatabase, lockDatabase, type StoredWebAuthnCredential } from "./src/database/db.ts";
+import fs from "fs";
+import { db, isDatabaseUnlocked, isDatabaseRegistered, getAuthConfig, saveAuthConfig, unlockDatabase, lockDatabase, getAtlasDir, type StoredWebAuthnCredential } from "./src/database/db.ts";
 import { hashPin } from "./src/utils/crypto.ts";
 import crypto from "node:crypto";
+import { exec } from "child_process";
 import { transactions, creditCards, financings, appSettings } from "./src/database/schema.ts";
 import { eq, desc, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
@@ -658,6 +660,89 @@ async function startServer() {
       } catch (error: any) {
         console.error("Error saving profile:", error);
         res.status(500).json({ error: error.message });
+      }
+    });
+
+    const reportsDir = path.join(getAtlasDir(), "reports");
+    if (!fs.existsSync(reportsDir)) {
+      try {
+        fs.mkdirSync(reportsDir, { recursive: true });
+      } catch (e) {
+        console.error("Failed to create reports directory:", e);
+      }
+    }
+
+    app.get("/api/reports", (req, res) => {
+      try {
+        if (!fs.existsSync(reportsDir)) {
+          return res.json([]);
+        }
+        const files = fs.readdirSync(reportsDir);
+        const reports = files
+          .filter(file => file.endsWith(".pdf"))
+          .map(file => {
+            const filePath = path.join(reportsDir, file);
+            const stats = fs.statSync(filePath);
+            return {
+              name: file,
+              createdAt: stats.birthtime || stats.mtime,
+              size: stats.size,
+            };
+          })
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        res.json(reports);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.post("/api/reports", (req, res) => {
+      try {
+        const { name, content } = req.body;
+        if (!name || !content) {
+          return res.status(400).json({ error: "Missing name or content" });
+        }
+        
+        const commaIndex = content.indexOf(",");
+        const base64Data = commaIndex !== -1 ? content.slice(commaIndex + 1) : content;
+        const filePath = path.join(reportsDir, name);
+        
+        fs.writeFileSync(filePath, Buffer.from(base64Data, "base64"));
+        res.json({ success: true, name });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.post("/api/reports/open", (req, res) => {
+      try {
+        const { name } = req.body;
+        if (!name) {
+          return res.status(400).json({ error: "Missing name" });
+        }
+        const filePath = path.join(reportsDir, name);
+        if (!fs.existsSync(filePath)) {
+          return res.status(404).json({ error: "File not found" });
+        }
+
+        let command = "";
+        if (process.platform === "win32") {
+          command = `start "" "${filePath}"`;
+        } else if (process.platform === "darwin") {
+          command = `open "${filePath}"`;
+        } else {
+          command = `xdg-open "${filePath}"`;
+        }
+
+        exec(command, (error) => {
+          if (error) {
+            console.error("[Server] Failed to open file:", error);
+            return res.status(500).json({ error: "Failed to open file" });
+          }
+          res.json({ success: true });
+        });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
       }
     });
 

@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Search, Bell } from 'lucide-react';
+import { Search, Bell, FileText, ExternalLink, RefreshCw } from 'lucide-react';
 import { TitleBar } from './components/TitleBar';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './modules/dashboard/Dashboard';
@@ -16,6 +16,12 @@ import { SplashScreen } from './modules/auth/SplashScreen';
 import { UpdateModal } from './components/UpdateModal';
 import { useFinanceStore } from './store/useFinanceStore';
 
+interface ReportFile {
+  name: string;
+  createdAt: string;
+  size: number;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
@@ -26,9 +32,102 @@ export default function App() {
   const [availableVersion, setAvailableVersion] = useState<string | null>(null);
   const { user, isAuthenticated, checkAuthStatus, fetchFinancingMeta, fetchUserProfile, lockApp } = useFinanceStore();
 
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [reports, setReports] = useState<ReportFile[]>([]);
+
+  const fetchReports = async () => {
+    try {
+      const res = await fetch('/api/reports');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setReports(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch reports:', e);
+    }
+  };
+
+  const handleOpenReport = async (name: string) => {
+    try {
+      await fetch('/api/reports/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+    } catch (e) {
+      console.error('Failed to open report:', e);
+    }
+  };
+
+  const groupReportsByDate = (reportsList: ReportFile[]) => {
+    const groups: { [key: string]: ReportFile[] } = {};
+    
+    reportsList.forEach((report) => {
+      const date = new Date(report.createdAt);
+      const day = date.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      });
+      
+      const today = new Date().toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      });
+      
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      });
+      
+      let label = day;
+      if (day === today) {
+        label = 'Hoje';
+      } else if (day === yesterdayStr) {
+        label = 'Ontem';
+      }
+      
+      if (!groups[label]) {
+        groups[label] = [];
+      }
+      groups[label].push(report);
+    });
+    
+    return groups;
+  };
+
+  const formatReportTitle = (name: string) => {
+    const isPatrimonio = name.includes('patrimonio');
+    const typeLabel = isPatrimonio ? 'Extrato de Patrimônio' : 'Relatório Mensal / Anual';
+    
+    const timeMatch = name.match(/-(\d{2})(\d{2})\.pdf$/);
+    if (timeMatch) {
+      return `${typeLabel} - ${timeMatch[1]}h${timeMatch[2]}`;
+    }
+    return name;
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
   useEffect(() => {
     checkAuthStatus();
   }, [checkAuthStatus]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchReports();
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -149,11 +248,12 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="relative group">
+              <div className="relative">
                 <button
                   onClick={() => {
-                    if (updateAvailable) {
-                      setShowUpdateModal(true);
+                    setShowNotifications(!showNotifications);
+                    if (!showNotifications) {
+                      fetchReports();
                     }
                   }}
                   className={`relative p-2.5 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 transition-all shadow-sm flex items-center justify-center cursor-pointer ${
@@ -164,7 +264,7 @@ export default function App() {
                 >
                   <Bell size={18} className={updateAvailable ? 'animate-bounce' : ''} />
 
-                  {updateAvailable ? (
+                  {(updateAvailable || reports.length > 0) ? (
                     <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
@@ -174,19 +274,99 @@ export default function App() {
                   )}
                 </button>
 
-                <div className="absolute right-0 top-full mt-2 w-64 scale-95 opacity-0 pointer-events-none group-hover:scale-100 group-hover:opacity-100 transition-all duration-200 z-50 origin-top-right">
-                  <div className="rounded-xl border border-stone-800 bg-stone-900 px-3.5 py-2.5 shadow-xl text-stone-100 text-xs">
-                    <div className="flex items-center gap-2 font-semibold">
-                      <span className={`h-1.5 w-1.5 rounded-full ${updateAvailable ? 'bg-emerald-400 animate-pulse' : 'bg-emerald-500'}`}></span>
-                      <span>{updateAvailable ? 'Atualizacao disponivel!' : 'Sistema atualizado'}</span>
+                {showNotifications && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
+                    <div className="absolute right-0 top-full mt-2 w-[380px] z-50 origin-top-right animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="rounded-2xl border border-stone-200 bg-white shadow-2xl overflow-hidden">
+                        {/* Header */}
+                        <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+                          <div>
+                            <h3 className="text-sm font-bold text-stone-900">Notificações</h3>
+                            <p className="text-[10px] text-stone-400 font-medium">Atualizações e documentos gerados</p>
+                          </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); fetchReports(); }}
+                            className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors"
+                            title="Atualizar"
+                          >
+                            <RefreshCw size={14} />
+                          </button>
+                        </div>
+
+                        {/* Update Status */}
+                        <div className="px-5 py-3 border-b border-stone-100">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${updateAvailable ? 'bg-emerald-50 text-emerald-500' : 'bg-stone-100 text-stone-400'}`}>
+                              <Bell size={14} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-stone-900">
+                                {updateAvailable ? 'Atualização disponível!' : 'Sistema atualizado'}
+                              </p>
+                              <p className="text-[10px] text-stone-400 truncate">
+                                {updateAvailable
+                                  ? `Atlas v${availableVersion || '?'} pronta para instalar`
+                                  : `Versão estável${currentVersion ? ` v${currentVersion}` : ''}`}
+                              </p>
+                            </div>
+                            {updateAvailable && (
+                              <button
+                                onClick={() => { setShowUpdateModal(true); setShowNotifications(false); }}
+                                className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg hover:bg-emerald-100 transition-colors"
+                              >
+                                Instalar
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Reports History */}
+                        <div className="max-h-[360px] overflow-y-auto">
+                          {reports.length === 0 ? (
+                            <div className="px-5 py-8 text-center">
+                              <FileText size={28} className="mx-auto text-stone-300 mb-2" />
+                              <p className="text-xs text-stone-400 font-medium">Nenhum documento gerado ainda.</p>
+                              <p className="text-[10px] text-stone-300 mt-1">Emita um relatório PDF para vê-lo aqui.</p>
+                            </div>
+                          ) : (
+                            Object.entries(groupReportsByDate(reports)).map(([dateLabel, dateReports]) => (
+                              <div key={dateLabel}>
+                                <div className="px-5 py-2 bg-stone-50/80 sticky top-0">
+                                  <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">{dateLabel}</p>
+                                </div>
+                                {dateReports.map((report) => (
+                                  <div
+                                    key={report.name}
+                                    className="px-5 py-3 flex items-center gap-3 hover:bg-stone-50 transition-colors cursor-pointer group/item"
+                                    onClick={() => handleOpenReport(report.name)}
+                                  >
+                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                                      report.name.includes('patrimonio')
+                                        ? 'bg-atlas-teal/10 text-atlas-emerald'
+                                        : 'bg-blue-50 text-blue-500'
+                                    }`}>
+                                      <FileText size={16} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-bold text-stone-900 truncate">{formatReportTitle(report.name)}</p>
+                                      <p className="text-[10px] text-stone-400">
+                                        {new Date(report.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                        {' · '}
+                                        {formatSize(report.size)}
+                                      </p>
+                                    </div>
+                                    <ExternalLink size={14} className="text-stone-300 group-hover/item:text-stone-500 transition-colors flex-shrink-0" />
+                                  </div>
+                                ))}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <p className="mt-1 text-[10px] text-stone-400 leading-normal">
-                      {updateAvailable
-                        ? `Uma nova versao do Atlas${availableVersion ? ` (v${availableVersion})` : ''} esta pronta. Clique no sino para instalar!`
-                        : `Voce esta rodando a versao estavel mais recente${currentVersion ? ` (v${currentVersion})` : ''}.`}
-                    </p>
-                  </div>
-                </div>
+                  </>
+                )}
               </div>
 
             </div>

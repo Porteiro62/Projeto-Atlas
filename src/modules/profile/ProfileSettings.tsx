@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Save, Camera, User, AtSign, LogOut } from 'lucide-react';
+import { X, Save, Camera, User, AtSign } from 'lucide-react';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { motion } from 'motion/react';
 
@@ -8,7 +8,7 @@ interface ProfileSettingsProps {
 }
 
 export function ProfileSettings({ onClose }: ProfileSettingsProps) {
-  const { user, updateUser, logout } = useFinanceStore();
+  const { user, updateUser } = useFinanceStore();
   const [formData, setFormData] = useState({
     name: user?.name || '',
     username: user?.username || '',
@@ -54,17 +54,6 @@ export function ProfileSettings({ onClose }: ProfileSettingsProps) {
             <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-1">Gerencie sua conta</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                logout();
-                onClose();
-              }}
-              className="p-2 hover:bg-red-50 rounded-full transition-colors text-red-400 hover:text-red-600"
-              title="Sair da Conta"
-            >
-              <LogOut size={20} />
-            </button>
             <button
               type="button"
               onClick={onClose}

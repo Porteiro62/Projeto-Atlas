@@ -7,11 +7,13 @@ import {
   CreditCard,
   Home,
   ListOrdered,
-  UserCircle2
+  UserCircle2,
+  LogOut
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import type { UserProfile } from '../store/useFinanceStore';
+import { useFinanceStore } from '../store/useFinanceStore';
 
 
 function cn(...inputs: ClassValue[]) {
@@ -27,6 +29,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeTab, setActiveTab, appVersion, user, onProfileClick }: SidebarProps) {
+  const { logout } = useFinanceStore();
   const menuItems = [
     { id: 'dashboard', label: 'Panorama', icon: LayoutDashboard },
     { id: 'transactions', label: 'Histórico', icon: ListOrdered },
@@ -60,7 +63,7 @@ export function Sidebar({ activeTab, setActiveTab, appVersion, user, onProfileCl
         ))}
       </nav>
 
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-4 flex flex-col gap-2">
         <button
           onClick={onProfileClick}
           className="w-full flex items-center gap-3 rounded-2xl border border-atlas-teal/20 bg-atlas-teal/10 px-4 py-3 text-left transition-all hover:bg-atlas-teal/20"
@@ -78,6 +81,14 @@ export function Sidebar({ activeTab, setActiveTab, appVersion, user, onProfileCl
               @{user?.username || 'usuario'}
             </p>
           </div>
+        </button>
+
+        <button
+          onClick={logout}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-rose-950/20 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition-all text-[10px] font-bold uppercase tracking-widest shadow-sm"
+        >
+          <LogOut size={14} />
+          Sair da Conta
         </button>
       </div>
 
