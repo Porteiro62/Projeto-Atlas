@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
+import logoImg from '../../assets/logo.png';
 
 export function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const [progress, setProgress] = useState(0);
@@ -20,56 +21,60 @@ export function SplashScreen({ onFinish }: { onFinish: () => void }) {
   }, [onFinish]);
 
   return (
-    <div className="fixed inset-0 bg-atlas-dark flex flex-col items-center justify-center z-[1000]">
+    <div className="fixed inset-0 bg-atlas-dark flex flex-col items-center justify-center z-[1000] overflow-hidden select-none">
+      {/* Background gradients for premium aesthetic */}
+      <div className="absolute inset-0 opacity-40 pointer-events-none">
+        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_35%,rgba(38,208,168,0.15)_0%,transparent_60%)]"></div>
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.01)_0%,transparent_50%,rgba(38,208,168,0.03)_100%)]"></div>
+      </div>
+
+      {/* Logo Container with Entrance and Hovering animations */}
       <motion.div 
-        initial={{ scale: 0.8, opacity: 0 }}
+        initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
-        className="relative mb-12"
+        transition={{ duration: 1.0, ease: "easeOut" }}
+        className="relative mb-12 max-w-[280px] w-full px-6 flex flex-col items-center"
       >
-        <div className="w-24 h-24 bg-atlas-emerald/10 rounded-[32px] flex items-center justify-center relative">
-          <motion.div 
-            animate={{ 
-              rotate: [45, 225, 45],
-            }}
-            transition={{ 
-              duration: 4, 
-              repeat: Infinity,
-              ease: "easeInOut" 
-            }}
-            className="w-10 h-10 bg-atlas-emerald rounded-sm rotate-45 shadow-[0_0_30px_rgba(38,208,168,0.4)]"
-          ></motion.div>
-          
-          {/* Pulsing ring */}
-          <motion.div 
-            animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="absolute inset-0 rounded-[32px] border-2 border-atlas-emerald/30"
-          ></motion.div>
-        </div>
+        {/* Ambient glow behind logo */}
+        <div className="absolute w-48 h-48 bg-atlas-emerald/10 blur-3xl rounded-full scale-75 animate-pulse pointer-events-none z-0"></div>
+        
+        <motion.img 
+          src={logoImg} 
+          alt="Atlas Logo" 
+          className="w-full h-auto relative z-10"
+          animate={{
+            y: [0, -6, 0]
+          }}
+          transition={{
+            duration: 4,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        />
       </motion.div>
 
-      <div className="text-center space-y-6 max-w-xs w-full px-8">
+      <div className="text-center space-y-6 max-w-xs w-full px-8 relative z-10">
         <div>
-          <h1 className="text-3xl font-black text-white tracking-tighter uppercase italic">Atlas</h1>
-          <p className="text-[10px] text-atlas-cream/40 font-bold uppercase tracking-[0.3em] mt-1">Sincronizando Módulos</p>
+          <p className="text-[10px] text-atlas-cream/40 font-bold uppercase tracking-[0.3em]">Sincronizando Módulos</p>
         </div>
 
-        <div className="relative h-1 w-full bg-white/5 rounded-full overflow-hidden">
-          <motion.div 
-            className="absolute top-0 left-0 h-full bg-atlas-emerald shadow-[0_0_10px_rgba(38,208,168,0.5)]"
-            initial={{ width: 0 }}
-            animate={{ width: `${progress}%` }}
-          />
-        </div>
+        <div className="space-y-3">
+          <div className="relative h-1 w-full bg-white/5 rounded-full overflow-hidden">
+            <motion.div 
+              className="absolute top-0 left-0 h-full bg-atlas-emerald shadow-[0_0_10px_rgba(38,208,168,0.5)]"
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+            />
+          </div>
 
-        <div className="flex justify-between items-center text-[9px] font-bold text-stone-500 uppercase tracking-widest">
-            <span>Iniciando Banco Offline</span>
-            <span>{progress}%</span>
+          <div className="flex justify-between items-center text-[9px] font-bold text-stone-500 uppercase tracking-widest">
+              <span>Iniciando Banco Offline</span>
+              <span>{progress}%</span>
+          </div>
         </div>
       </div>
 
-      <footer className="absolute bottom-12 text-[10px] text-stone-600 font-bold uppercase tracking-widest flex items-center gap-2">
+      <footer className="absolute bottom-12 text-[10px] text-stone-600 font-bold uppercase tracking-widest flex items-center gap-2 z-10">
         <div className="w-1.5 h-1.5 rounded-full bg-atlas-emerald animate-pulse"></div>
         Ambiente Seguro e Criptografado
       </footer>

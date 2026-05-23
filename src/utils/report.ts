@@ -104,6 +104,11 @@ export function exportFinanceReportPdf(params: {
   const financingTarget = Number(financingMeta.target) || 0;
   const financingProgress = financingTarget > 0 ? (financingAccumulated / financingTarget) * 100 : 0;
 
+  const latestFinancingTx = transactions
+    .filter((t) => t.type === 'financing' && t.value > 0)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+  const identifiedMonthlyInstallment = latestFinancingTx ? latestFinancingTx.value : 0;
+
   doc.setFillColor(15, 23, 42);
   doc.rect(0, 0, 210, 34, 'F');
   doc.setTextColor(255, 255, 255);
@@ -173,7 +178,7 @@ export function exportFinanceReportPdf(params: {
     body: [
       ['Valor da meta', currencyFormatter.format(financingTarget)],
       ['Valor inicial', currencyFormatter.format(financingMeta.initialValue || 0)],
-      ['Aporte mensal', currencyFormatter.format(financingMeta.monthlyInstallment || 0)],
+      ['Aporte mensal (identificado)', currencyFormatter.format(identifiedMonthlyInstallment)],
       ['Acumulado', currencyFormatter.format(financingAccumulated)],
       ['Progresso', `${financingProgress.toFixed(1)}%`],
     ],
@@ -254,8 +259,14 @@ export function exportFinancingReportPdf(params: {
   const totalAccumulated = accumulatedSum + initialValue;
   const progressPercent = target > 0 ? (totalAccumulated / target) * 100 : 0;
   const remaining = Math.max(target - totalAccumulated, 0);
-  const installmentsRemaining = Math.ceil(remaining / (financingMeta.monthlyInstallment || 1));
-  const completionDate = addMonths(new Date(), installmentsRemaining);
+
+  const latestFinancingTx = transactions
+    .filter((t) => t.type === 'financing' && t.value > 0)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+  const identifiedMonthlyInstallment = latestFinancingTx ? latestFinancingTx.value : 0;
+
+  const installmentsRemaining = identifiedMonthlyInstallment > 0 ? Math.ceil(remaining / identifiedMonthlyInstallment) : 0;
+  const completionDate = installmentsRemaining > 0 ? addMonths(new Date(), installmentsRemaining) : new Date();
 
   // Header banner
   doc.setFillColor(15, 23, 42);
@@ -279,7 +290,7 @@ export function exportFinancingReportPdf(params: {
     body: [
       ['Valor da Meta', currencyFormatter.format(target)],
       ['Valor Inicial', currencyFormatter.format(initialValue)],
-      ['Aporte Mensal Fixado', currencyFormatter.format(financingMeta.monthlyInstallment || 0)],
+      ['Aporte Mensal Identificado', currencyFormatter.format(identifiedMonthlyInstallment)],
       ['Total Acumulado (Hoje)', currencyFormatter.format(totalAccumulated)],
       ['Progresso', `${progressPercent.toFixed(1)}%`],
       ['Valor Faltante', currencyFormatter.format(remaining)],

@@ -15,6 +15,9 @@ import { LockScreen } from './modules/auth/LockScreen';
 import { SplashScreen } from './modules/auth/SplashScreen';
 import { UpdateModal } from './components/UpdateModal';
 import { useFinanceStore } from './store/useFinanceStore';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { clsx } from 'clsx';
 
 interface ReportFile {
   name: string;
@@ -30,10 +33,34 @@ export default function App() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
   const [availableVersion, setAvailableVersion] = useState<string | null>(null);
-  const { user, isAuthenticated, checkAuthStatus, fetchFinancingMeta, fetchUserProfile, lockApp } = useFinanceStore();
+  const { user, isAuthenticated, checkAuthStatus, fetchFinancingMeta, fetchUserProfile, lockApp, transactions } = useFinanceStore();
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [reports, setReports] = useState<ReportFile[]>([]);
+
+  const [headerSearchTerm, setHeaderSearchTerm] = useState('');
+  const [showSearchResults, setShowSearchResults] = useState(false);
+
+  const searchResults = React.useMemo(() => {
+    if (!headerSearchTerm.trim() || headerSearchTerm.length < 2) return [];
+    
+    const term = headerSearchTerm.toLowerCase();
+    
+    return transactions.filter(t => {
+      // Search only in income, expense, and credit_card
+      if (t.type !== 'income' && t.type !== 'expense' && t.type !== 'credit_card') return false;
+      
+      const nameMatch = t.description.toLowerCase().includes(term) || t.category.toLowerCase().includes(term);
+      
+      const formattedValue = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.value).toLowerCase();
+      const valueMatch = String(t.value).includes(term) || formattedValue.includes(term);
+      
+      const formattedDate = format(parseISO(t.date), 'dd/MM/yyyy');
+      const dateMatch = formattedDate.includes(term) || format(parseISO(t.date), 'dd MMM yyyy', { locale: ptBR }).toLowerCase().includes(term);
+      
+      return nameMatch || valueMatch || dateMatch;
+    }).slice(0, 8); // limit to 8 results
+  }, [transactions, headerSearchTerm]);
 
   const fetchReports = async () => {
     try {
@@ -236,15 +263,82 @@ export default function App() {
 
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <header className="h-20 bg-stone-50/80 backdrop-blur-md sticky top-0 z-40 flex items-center justify-between px-8 border-b border-stone-200 shadow-sm">
-            <div className="flex items-center gap-4 flex-1 max-w-xl">
+            <div className="flex items-center gap-4 flex-1 max-w-xl relative">
               <div className="relative w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={16} />
                 <input
                   type="text"
-                  placeholder="Procurar transacoes, categorias ou relatorios..."
+                  value={headerSearchTerm}
+                  onChange={(e) => {
+                    setHeaderSearchTerm(e.target.value);
+                    setShowSearchResults(true);
+                  }}
+                  onFocus={() => setShowSearchResults(true)}
+                  placeholder="Buscar receitas, despesas e cartões por nome, valor ou data..."
                   className="w-full bg-white border border-stone-200 rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all shadow-sm"
                 />
               </div>
+
+              {/* Live search results overlay */}
+              {showSearchResults && headerSearchTerm.length >= 2 && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowSearchResults(false)} />
+                  <div className="absolute top-full left-0 right-0 mt-2 z-50 origin-top-right animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="rounded-2xl border border-stone-200 bg-white shadow-2xl overflow-hidden max-h-[380px] overflow-y-auto">
+                      <div className="px-4 py-3 border-b border-stone-100 bg-stone-50/50 flex justify-between items-center">
+                        <div>
+                          <h3 className="text-xs font-bold text-stone-900">Resultados da Busca</h3>
+                          <p className="text-[9px] text-stone-400 font-medium">Buscando por "{headerSearchTerm}"</p>
+                        </div>
+                        <span className="text-[9px] bg-stone-200 text-stone-600 px-2 py-0.5 rounded-full font-bold">
+                          {searchResults.length} {searchResults.length === 1 ? 'resultado' : 'resultados'}
+                        </span>
+                      </div>
+                      
+                      <div className="divide-y divide-stone-100">
+                        {searchResults.length === 0 ? (
+                          <div className="px-5 py-8 text-center text-stone-400 text-xs font-medium">
+                            Nenhuma transação correspondente encontrada.
+                          </div>
+                        ) : (
+                          searchResults.map(tx => (
+                            <div 
+                              key={tx.id} 
+                              className="px-5 py-3 hover:bg-stone-50 transition-colors flex justify-between items-center"
+                            >
+                              <div className="min-w-0 flex-1 pr-4">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={clsx(
+                                    "px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider",
+                                    tx.type === 'income' && "bg-atlas-emerald/10 text-atlas-emerald",
+                                    tx.type === 'expense' && "bg-rose-50 text-rose-500",
+                                    tx.type === 'credit_card' && "bg-blue-50 text-blue-500"
+                                  )}>
+                                    {tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Cartão'}
+                                  </span>
+                                  <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wide">
+                                    {tx.category}
+                                  </span>
+                                </div>
+                                <p className="text-xs font-bold text-stone-900 truncate">{tx.description}</p>
+                                <p className="text-[9px] text-stone-400">
+                                  {format(parseISO(tx.date), 'dd/MM/yyyy')}
+                                </p>
+                              </div>
+                              <div className={clsx(
+                                "text-xs font-bold text-right shrink-0",
+                                tx.type === 'income' ? "text-atlas-emerald" : "text-rose-500"
+                              )}>
+                                {tx.type === 'income' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.value)}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-4">

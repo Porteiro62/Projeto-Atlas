@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useFinanceStore, Transaction } from '../../store/useFinanceStore';
 import { TransactionForm } from './TransactionForm';
 import { format, parseISO } from 'date-fns';
+import { MonthYearPicker } from '../../components/MonthYearPicker';
 import { ptBR } from 'date-fns/locale';
 import { Search, Filter, MoreHorizontal, Download, Trash2, Plus, ChevronLeft, ChevronRight, Edit2, CreditCard } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -131,22 +132,12 @@ export function TransactionList({ filterType }: { filterType?: Transaction['type
 
         <div className="flex items-center gap-3">
           {/* Month Slider */}
-          <div className="flex items-center bg-white border border-stone-200 rounded-xl px-2 py-1 shadow-sm mr-2">
-            <button
-              onClick={() => changeMonth(-1)}
-              className="p-1 text-stone-400 hover:text-stone-900 transition-colors"
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <span className="px-4 text-xs font-bold uppercase tracking-widest text-stone-700 min-w-[140px] text-center">
-              {currentMonthName}
-            </span>
-            <button
-              onClick={() => changeMonth(1)}
-              className="p-1 text-stone-400 hover:text-stone-900 transition-colors"
-            >
-              <ChevronRight size={20} />
-            </button>
+          <div className="mr-2">
+            <MonthYearPicker
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              onChange={(m, y) => setDate(m, y)}
+            />
           </div>
           <button
             onClick={handleDeleteAll}

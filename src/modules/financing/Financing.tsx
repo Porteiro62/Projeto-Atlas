@@ -5,12 +5,15 @@ import { TransactionForm } from '../transactions/TransactionForm';
 import { FinancingMetaForm } from './FinancingMetaForm';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { format, parseISO, differenceInMonths, addMonths } from 'date-fns';
+import { MonthYearPicker } from '../../components/MonthYearPicker';
 import { ptBR } from 'date-fns/locale';
 import { clsx } from 'clsx';
 import { exportFinancingReportPdf } from '../../utils/report';
 
 export function FinancingModule() {
-  const { transactions, financingMeta, selectedMonth, selectedYear, setDate, fetchTransactions, fetchFinancingMeta, deleteTransaction, deleteAllTransactions } = useFinanceStore();
+  const { transactions, financingMeta, fetchTransactions, fetchFinancingMeta, deleteTransaction, deleteAllTransactions } = useFinanceStore();
+  const [localMonth, setLocalMonth] = useState(new Date().getMonth());
+  const [localYear, setLocalYear] = useState(new Date().getFullYear());
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isMetaFormOpen, setIsMetaFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -40,14 +43,6 @@ export function FinancingModule() {
     setEditingTransaction(null);
   };
 
-  const changeMonth = (offset: number) => {
-    let newMonth = selectedMonth + offset;
-    let newYear = selectedYear;
-    if (newMonth < 0) { newMonth = 11; newYear -= 1; }
-    else if (newMonth > 11) { newMonth = 0; newYear += 1; }
-    setDate(newMonth, newYear);
-  };
-
   const handleDeleteAll = async () => {
     setConfirmConfig({
       isOpen: true,
@@ -64,13 +59,13 @@ export function FinancingModule() {
     });
   };
 
-  // Filter financing contributions for CURRENT SELECTED MONTH
+  // Filter financing contributions for CURRENT SELECTED YEAR (all months)
   const contributions = transactions
     .filter(t => {
       const date = parseISO(t.date);
-      return t.type === 'financing' && date.getMonth() === selectedMonth && date.getFullYear() === selectedYear;
+      return t.type === 'financing' && date.getFullYear() === localYear;
     })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   // ALL contributions for total sum (considering only dates <= today)
   const allContributionsSum = transactions
@@ -88,10 +83,20 @@ export function FinancingModule() {
   const progressPercent = Math.min((totalAccumulated / financingMeta.target) * 100, 100);
   const remaining = Math.max(financingMeta.target - totalAccumulated, 0);
 
-  const installmentsRemaining = Math.ceil(remaining / (financingMeta.monthlyInstallment || 1));
-  const completionDate = addMonths(new Date(), installmentsRemaining);
+  // Dynamically identify the monthly contribution value registered in transactions
+  const latestFinancingTx = transactions
+    .filter(t => t.type === 'financing' && t.value > 0)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+  const identifiedMonthlyInstallment = latestFinancingTx ? latestFinancingTx.value : 0;
 
-  const currentMonthName = format(new Date(selectedYear, selectedMonth), 'MMMM yyyy', { locale: ptBR });
+  const installmentsRemaining = identifiedMonthlyInstallment > 0 
+    ? Math.ceil(remaining / identifiedMonthlyInstallment) 
+    : 0;
+  const completionDate = installmentsRemaining > 0 
+    ? addMonths(new Date(), installmentsRemaining) 
+    : new Date();
+
+  const currentMonthName = format(new Date(localYear, localMonth), 'MMMM yyyy', { locale: ptBR });
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -101,18 +106,15 @@ export function FinancingModule() {
           <p className="text-stone-500 text-sm">Acompanhamento da meta patrimonial para aquisição.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {/* Month Slider */}
-          <div className="flex items-center bg-white border border-stone-200 rounded-xl px-2 py-1 shadow-sm h-[42px]">
-            <button onClick={() => changeMonth(-1)} className="p-1 text-stone-400 hover:text-stone-900 transition-colors">
-              <ChevronLeft size={20} />
-            </button>
-            <span className="px-4 text-[10px] font-bold uppercase tracking-widest text-stone-700 min-w-[130px] text-center">
-              {currentMonthName}
-            </span>
-            <button onClick={() => changeMonth(1)} className="p-1 text-stone-400 hover:text-stone-900 transition-colors">
-              <ChevronRight size={20} />
-            </button>
-          </div>
+          {/* Month/Year Selector (acting independently) */}
+          <MonthYearPicker
+            selectedMonth={localMonth}
+            selectedYear={localYear}
+            onChange={(m, y) => {
+              setLocalMonth(m);
+              setLocalYear(y);
+            }}
+          />
 
           <button 
             onClick={handleDeleteAll}
@@ -176,7 +178,7 @@ export function FinancingModule() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
               <div>
                 <p className="text-[10px] text-stone-500 font-bold uppercase mb-1 tracking-wider">Já Realizado</p>
                 <p className="text-2xl font-bold text-stone-900 tracking-tight">
@@ -184,9 +186,11 @@ export function FinancingModule() {
                 </p>
               </div>
               <div>
-                <p className="text-[10px] text-stone-500 font-bold uppercase mb-1 tracking-wider">Aporte Fixado</p>
+                <p className="text-[10px] text-stone-500 font-bold uppercase mb-1 tracking-wider">Aporte Identificado</p>
                 <p className="text-2xl font-bold text-atlas-emerald tracking-tight">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financingMeta.monthlyInstallment)}
+                  {identifiedMonthlyInstallment > 0 
+                    ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(identifiedMonthlyInstallment)
+                    : 'Não cadastrado'}
                 </p>
               </div>
               <div>
@@ -214,29 +218,34 @@ export function FinancingModule() {
           {/* Timeline of contributions */}
           <div className="bg-white border border-stone-200 rounded-3xl overflow-hidden shadow-sm">
              <div className="p-6 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
-                <h4 className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">Timeline de Aportes ({currentMonthName})</h4>
+                <h4 className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">Timeline de Aportes ({localYear})</h4>
                 <TrendingUp size={16} className="text-stone-400" />
              </div>
              <div className="divide-y divide-stone-100 max-h-[400px] overflow-y-auto">
                 {contributions.length === 0 ? (
-                  <div className="p-8 text-center text-stone-400 text-sm">Nenhum aporte registrado ainda.</div>
+                  <div className="p-8 text-center text-stone-400 text-sm">Nenhum aporte registrado ainda para este ano.</div>
                 ) : contributions.map(tx => (
                   <div key={tx.id} className="p-6 flex items-center justify-between hover:bg-stone-50 transition-all group">
                     <div className="flex items-center gap-4">
                       <div className={clsx(
-                        "w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs",
+                        "w-10 h-10 rounded-xl flex flex-col items-center justify-center font-bold text-stone-950",
                         parseISO(tx.date) <= new Date() ? "bg-atlas-emerald/10 text-atlas-emerald" : "bg-stone-100 text-stone-400"
                       )}>
-                        {format(parseISO(tx.date), 'dd')}
+                        <span className="text-[11px] leading-none">{format(parseISO(tx.date), 'dd')}</span>
+                        <span className="text-[7px] uppercase tracking-wider font-bold leading-none mt-0.5">
+                          {format(parseISO(tx.date), 'MMM', { locale: ptBR })}
+                        </span>
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-bold text-stone-900">{tx.description}</p>
-                          {parseISO(tx.date) > new Date() && (
-                            <span className="text-[8px] px-1.5 py-0.5 bg-stone-100 text-stone-400 rounded-md font-bold uppercase tracking-widest">Previsto</span>
+                          {parseISO(tx.date) > new Date() ? (
+                            <span className="text-[8px] px-1.5 py-0.5 bg-stone-100 text-stone-500 rounded-md font-bold uppercase tracking-widest border border-stone-200/50">Previsto</span>
+                          ) : (
+                            <span className="text-[8px] px-1.5 py-0.5 bg-atlas-emerald/10 text-atlas-emerald rounded-md font-bold uppercase tracking-widest border border-atlas-emerald/20">Realizado</span>
                           )}
                         </div>
-                        <p className="text-[10px] text-stone-400 font-bold uppercase">{format(parseISO(tx.date), 'MMMM yyyy', { locale: ptBR })}</p>
+                        <p className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">{format(parseISO(tx.date), 'dd/MM/yyyy')}</p>
                       </div>
                     </div>
                       <div className="flex items-center gap-2">
@@ -280,17 +289,21 @@ export function FinancingModule() {
               <div>
                 <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1">Parcelas Restantes</p>
                 <p className="text-3xl font-bold text-atlas-emerald">
-                  {installmentsRemaining} <span className="text-sm text-stone-400 font-bold">meses</span>
+                  {identifiedMonthlyInstallment > 0 ? installmentsRemaining : 0} <span className="text-sm text-stone-400 font-bold">meses</span>
                 </p>
               </div>
               <div className="pt-2 border-t border-stone-200">
                 <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1">Encerramento em</p>
                 <p className="text-2xl font-bold text-stone-900">
-                  {format(completionDate, 'MMMM yyyy', { locale: ptBR })}
+                  {identifiedMonthlyInstallment > 0 
+                    ? format(completionDate, 'MMMM yyyy', { locale: ptBR })
+                    : 'N/A'}
                 </p>
               </div>
               <p className="text-xs text-stone-500 leading-relaxed font-medium">
-                Com base no aporte fixado de {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financingMeta.monthlyInstallment)}, você alcançará o objetivo em {completionDate.getFullYear()}.
+                {identifiedMonthlyInstallment > 0 
+                  ? `Com base no aporte mensal de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(identifiedMonthlyInstallment)} identificado nos seus lançamentos, você alcançará o objetivo em ${completionDate.getFullYear()}.`
+                  : 'Registre um aporte patrimonial para estimar o prazo até o atingimento da meta.'}
               </p>
             </div>
           </div>

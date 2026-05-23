@@ -11,7 +11,10 @@ export function FinancingMetaForm({ onClose }: { onClose: () => void }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await updateFinancingMeta(formData);
+    await updateFinancingMeta({
+      ...formData,
+      monthlyInstallment: 0
+    });
     setLoading(false);
     onClose();
   };
@@ -55,18 +58,7 @@ export function FinancingMetaForm({ onClose }: { onClose: () => void }) {
             <p className="text-[9px] text-stone-400 font-medium">Este valor é somado aos aportes registrados.</p>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-2">
-              <Plus size={12} /> Valor do Aporte Mensal
-            </label>
-            <CurrencyInput 
-              value={formData.monthlyInstallment}
-              onChange={(val) => setFormData({ ...formData, monthlyInstallment: val })}
-              className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-900 font-bold focus:ring-1 focus:ring-atlas-emerald outline-none transition-all"
-              placeholder="Ex: R$ 2.000,00"
-            />
-            <p className="text-[9px] text-stone-400 font-medium">Usado para calcular projeção de término.</p>
-          </div>
+          {/* O Aporte Mensal é identificado automaticamente a partir dos lançamentos do usuário na timeline */}
 
           <footer className="pt-4 flex gap-4">
             <button 

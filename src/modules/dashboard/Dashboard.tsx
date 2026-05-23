@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { FinancingMetaForm } from '../financing/FinancingMetaForm';
+import { MonthYearPicker } from '../../components/MonthYearPicker';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -90,7 +91,7 @@ export function Dashboard() {
 
   const annualSummary = useMemo(() => {
     return Array.from({ length: 12 }, (_, index) => {
-      const date = subMonths(new Date(selectedYear, selectedMonth, 1), 11 - index);
+      const date = new Date(selectedYear, index, 1);
       const summary = transactions.reduce((acc, transaction) => {
         const transactionDate = parseISO(transaction.date);
         if (transactionDate.getMonth() !== date.getMonth() || transactionDate.getFullYear() !== date.getFullYear()) {
@@ -118,7 +119,7 @@ export function Dashboard() {
         ...summary,
       };
     });
-  }, [transactions, selectedMonth, selectedYear]);
+  }, [transactions, selectedYear]);
 
   const annualTotalSummary = useMemo(() => {
     return annualSummary.reduce((acc, month) => {
@@ -177,6 +178,13 @@ export function Dashboard() {
       .reduce((sum, transaction) => sum + transaction.value, 0) + (Number(financingMeta.initialValue) || 0);
   }, [transactions, financingMeta]);
 
+  const identifiedMonthlyInstallment = useMemo(() => {
+    const latestFinancingTx = transactions
+      .filter((t) => t.type === 'financing' && t.value > 0)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+    return latestFinancingTx ? latestFinancingTx.value : 0;
+  }, [transactions]);
+
   const financingProgress = financingMeta.target > 0
     ? Math.min((financingAccumulated / financingMeta.target) * 100, 100)
     : 0;
@@ -191,17 +199,11 @@ export function Dashboard() {
           <p className="text-sm text-stone-500">Analise mensal e anual consolidada do Atlas.</p>
         </div>
 
-        <div className="flex items-center bg-white border border-stone-200 rounded-xl px-2 py-1 shadow-sm h-[42px]">
-          <button onClick={() => changeMonth(-1)} className="p-1 text-stone-400 hover:text-stone-900 transition-colors">
-            <ChevronLeft size={20} />
-          </button>
-          <span className="px-4 text-[10px] font-bold uppercase tracking-widest text-stone-700 min-w-[150px] text-center">
-            {getMonthLabel(selectedMonth, selectedYear)}
-          </span>
-          <button onClick={() => changeMonth(1)} className="p-1 text-stone-400 hover:text-stone-900 transition-colors">
-            <ChevronRight size={20} />
-          </button>
-        </div>
+        <MonthYearPicker
+          selectedMonth={selectedMonth}
+          selectedYear={selectedYear}
+          onChange={(m, y) => setDate(m, y)}
+        />
       </header>
 
       <section className="bg-white border border-stone-200 rounded-3xl p-8 shadow-sm">
@@ -359,66 +361,41 @@ export function Dashboard() {
       </section>
 
       <section className="bg-white border border-stone-200 rounded-3xl p-8 shadow-sm">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-3 rounded-2xl bg-stone-900 text-white">
-                <Home size={20} />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-stone-900 uppercase tracking-widest">Meta Patrimonial</h3>
-                <p className="text-xs text-stone-400 font-medium">Acompanhamento consolidado da meta cadastrada.</p>
-              </div>
+        <div className="w-full">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-3 rounded-2xl bg-stone-900 text-white">
+              <Home size={20} />
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="rounded-2xl border border-stone-100 bg-stone-50/80 px-5 py-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Acumulado</p>
-                <p className="text-xl font-bold text-stone-900">{currencyFormatter.format(financingAccumulated)}</p>
-              </div>
-              <div className="rounded-2xl border border-stone-100 bg-stone-50/80 px-5 py-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Meta</p>
-                <p className="text-xl font-bold text-stone-900">{currencyFormatter.format(financingMeta.target || 0)}</p>
-              </div>
-              <div className="rounded-2xl border border-stone-100 bg-stone-50/80 px-5 py-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Faltante</p>
-                <p className="text-xl font-bold text-rose-500">{currencyFormatter.format(remainingValue)}</p>
-              </div>
-            </div>
-
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Progresso da meta</span>
-              <span className="text-sm font-bold text-atlas-emerald">{financingProgress.toFixed(1)}%</span>
-            </div>
-            <div className="w-full h-3 bg-stone-100 rounded-full overflow-hidden border border-stone-200">
-              <div
-                className="h-full bg-atlas-emerald transition-all duration-1000"
-                style={{ width: `${financingProgress}%` }}
-              />
+            <div>
+              <h3 className="text-sm font-bold text-stone-900 uppercase tracking-widest">Meta Patrimonial</h3>
+              <p className="text-xs text-stone-400 font-medium">Acompanhamento consolidado da meta cadastrada.</p>
             </div>
           </div>
 
-          <div className="w-full lg:max-w-xs rounded-3xl bg-stone-900 text-white p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <Target size={18} className="text-atlas-emerald" />
-              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-300">Resumo da Meta</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="rounded-2xl border border-stone-100 bg-stone-50/80 px-5 py-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Acumulado</p>
+              <p className="text-xl font-bold text-stone-900">{currencyFormatter.format(financingAccumulated)}</p>
             </div>
-            <div className="space-y-4">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Valor inicial</p>
-                <p className="text-lg font-bold">{currencyFormatter.format(financingMeta.initialValue || 0)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Aporte mensal</p>
-                <p className="text-lg font-bold">{currencyFormatter.format(financingMeta.monthlyInstallment || 0)}</p>
-              </div>
+            <div className="rounded-2xl border border-stone-100 bg-stone-50/80 px-5 py-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Meta</p>
+              <p className="text-xl font-bold text-stone-900">{currencyFormatter.format(financingMeta.target || 0)}</p>
             </div>
-            <button
-              onClick={() => setIsMetaFormOpen(true)}
-              className="mt-6 w-full rounded-2xl bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-stone-900 transition-all hover:bg-stone-100"
-            >
-              Gerenciar Metas
-            </button>
+            <div className="rounded-2xl border border-stone-100 bg-stone-50/80 px-5 py-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Faltante</p>
+              <p className="text-xl font-bold text-rose-500">{currencyFormatter.format(remainingValue)}</p>
+            </div>
+          </div>
+
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Progresso da meta</span>
+            <span className="text-sm font-bold text-atlas-emerald">{financingProgress.toFixed(1)}%</span>
+          </div>
+          <div className="w-full h-3 bg-stone-100 rounded-full overflow-hidden border border-stone-200">
+            <div
+              className="h-full bg-atlas-emerald transition-all duration-1000"
+              style={{ width: `${financingProgress}%` }}
+            />
           </div>
         </div>
       </section>
