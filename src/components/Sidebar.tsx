@@ -8,7 +8,8 @@ import {
   Home,
   ListOrdered,
   UserCircle2,
-  LogOut
+  LogOut,
+  TrendingUp
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -37,6 +38,7 @@ export function Sidebar({ activeTab, setActiveTab, appVersion, user, onProfileCl
     { id: 'expenses', label: 'Despesas', icon: ArrowDownCircle },
     { id: 'credit-card', label: 'Cartões', icon: CreditCard },
     { id: 'financing', label: 'Patrimônio', icon: Home },
+    { id: 'investments', label: 'Investimentos', icon: TrendingUp },
   ];
 
   return (

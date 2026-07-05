@@ -64,6 +64,29 @@ export const migrations: Migration[] = [
         );
       `);
     }
+  },
+  {
+    id: 3,
+    name: '0003_investments_tables',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS investments (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          initial_value REAL NOT NULL,
+          date TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS investment_transactions (
+          id TEXT PRIMARY KEY,
+          investment_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          value REAL NOT NULL,
+          date TEXT NOT NULL,
+          FOREIGN KEY (investment_id) REFERENCES investments(id) ON DELETE CASCADE
+        );
+      `);
+    }
   }
 ];
 

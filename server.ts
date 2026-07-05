@@ -5,7 +5,7 @@ import { db, isDatabaseUnlocked, isDatabaseRegistered, getAuthConfig, saveAuthCo
 import { hashPin } from "./src/utils/crypto.ts";
 import crypto from "node:crypto";
 import { exec } from "child_process";
-import { transactions, creditCards, financings, appSettings } from "./src/database/schema.ts";
+import { transactions, creditCards, financings, appSettings, investments, investmentTransactions } from "./src/database/schema.ts";
 import { eq, desc, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -481,6 +481,16 @@ async function startServer() {
         const data = await db.query.transactions.findMany({
           orderBy: [desc(transactions.date)],
         });
+
+        // Auto-update pending transactions to paid if the date has arrived
+        const today = new Date().toISOString().split('T')[0];
+        for (const tx of data) {
+          if (tx.status === 'pending' && tx.date <= today) {
+            await db.update(transactions).set({ status: 'paid' }).where(eq(transactions.id, tx.id));
+            tx.status = 'paid';
+          }
+        }
+
         res.json(data);
       } catch (error) {
         console.error("Error fetching transactions:", error);
@@ -592,6 +602,71 @@ async function startServer() {
         res.json(data);
       } catch (error) {
         res.status(500).json({ error: "Failed to fetch financings" });
+      }
+    });
+
+    app.get("/api/investments", async (req, res) => {
+      try {
+        const data = await db.select().from(investments);
+        res.json(data);
+      } catch (error) {
+        console.error("Error fetching investments:", error);
+        res.status(500).json({ error: "Failed to fetch investments" });
+      }
+    });
+
+    app.post("/api/investments", async (req, res) => {
+      try {
+        const newInvestment = { ...req.body, id: uuidv4() };
+        await db.insert(investments).values(newInvestment);
+        res.status(201).json(newInvestment);
+      } catch (error) {
+        console.error("Error creating investment:", error);
+        res.status(500).json({ error: "Failed to create investment" });
+      }
+    });
+
+    app.delete("/api/investments/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        await db.delete(investmentTransactions).where(eq(investmentTransactions.investmentId, id));
+        await db.delete(investments).where(eq(investments.id, id));
+        res.status(204).send();
+      } catch (error) {
+        console.error("Error deleting investment:", error);
+        res.status(500).json({ error: "Failed to delete investment" });
+      }
+    });
+
+    app.get("/api/investments/transactions", async (req, res) => {
+      try {
+        const data = await db.select().from(investmentTransactions);
+        res.json(data);
+      } catch (error) {
+        console.error("Error fetching investment transactions:", error);
+        res.status(500).json({ error: "Failed to fetch investment transactions" });
+      }
+    });
+
+    app.post("/api/investments/transactions", async (req, res) => {
+      try {
+        const newTx = { ...req.body, id: uuidv4() };
+        await db.insert(investmentTransactions).values(newTx);
+        res.status(201).json(newTx);
+      } catch (error) {
+        console.error("Error creating investment transaction:", error);
+        res.status(500).json({ error: "Failed to create investment transaction" });
+      }
+    });
+
+    app.delete("/api/investments/transactions/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        await db.delete(investmentTransactions).where(eq(investmentTransactions.id, id));
+        res.status(204).send();
+      } catch (error) {
+        console.error("Error deleting investment transaction:", error);
+        res.status(500).json({ error: "Failed to delete investment transaction" });
       }
     });
 

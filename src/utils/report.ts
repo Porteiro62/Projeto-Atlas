@@ -2,7 +2,7 @@ import { format, parseISO, subMonths, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import type { FinancingMeta, Transaction } from '../store/useFinanceStore';
+import type { FinancingMeta, Transaction, Investment, InvestmentTransaction } from '../store/useFinanceStore';
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -340,6 +340,130 @@ export function exportFinancingReportPdf(params: {
   });
 
   const filename = `atlas-patrimonio-${format(generatedAt, 'yyyy-MM-dd-HHmm')}.pdf`;
+  doc.save(filename);
+
+  // Save to notification history on the server asynchronously
+  try {
+    const pdfBase64 = doc.output('datauristring');
+    fetch('/api/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: filename, content: pdfBase64 }),
+    }).catch((err) => console.error('Failed to save report to history:', err));
+  } catch (e) {
+    console.error('Error outputting pdf base64:', e);
+  }
+}
+
+export function exportInvestmentsReportPdf(params: {
+  investments: Investment[];
+  investmentTransactions: InvestmentTransaction[];
+}) {
+  const { investments, investmentTransactions } = params;
+  const doc = new jsPDF();
+  const generatedAt = new Date();
+
+  // Helper to format currency
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  };
+
+  // Calculations
+  const totalInitial = investments.reduce((acc, curr) => acc + curr.initialValue, 0);
+  const totalAportes = investmentTransactions
+    .filter(t => t.type === 'aporte')
+    .reduce((acc, curr) => acc + curr.value, 0);
+  const totalJuros = investmentTransactions
+    .filter(t => t.type === 'juros')
+    .reduce((acc, curr) => acc + curr.value, 0);
+  const totalPortfolioValue = totalInitial + totalAportes + totalJuros;
+
+  // 1. Header Banner
+  doc.setFillColor(15, 23, 42);
+  doc.rect(0, 0, 210, 34, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.text('Atlas - Relatório de Investimentos', 14, 15);
+  doc.setFontSize(10);
+  doc.text('Extrato Consolidado da Carteira e Histórico de Movimentações', 14, 23);
+  doc.setTextColor(148, 163, 184);
+  doc.text(`Gerado em ${format(generatedAt, 'dd/MM/yyyy HH:mm')}`, 14, 29);
+
+  // 2. Summary
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(12);
+  doc.text('Resumo da Carteira', 14, 44);
+
+  autoTable(doc, {
+    startY: 48,
+    head: [['Indicador', 'Valor']],
+    body: [
+      ['Patrimônio Consolidado Total', formatCurrency(totalPortfolioValue)],
+      ['Total Aplicado (Capital Inicial + Aportes)', formatCurrency(totalInitial + totalAportes)],
+      ['Total de Rendimentos (Juros Acumulados)', formatCurrency(totalJuros)],
+      ['Quantidade de Ativos', `${investments.length} ativos`],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [15, 23, 42] },
+    styles: { fontSize: 9.5 },
+  });
+
+  // 3. Active Investments Table
+  doc.setFontSize(12);
+  doc.text('Ativos Cadastrados', 14, (doc as any).lastAutoTable.finalY + 12);
+
+  const assetsBody = investments.map(inv => {
+    const txs = investmentTransactions.filter(t => t.investmentId === inv.id);
+    const aportes = txs.filter(t => t.type === 'aporte').reduce((acc, curr) => acc + curr.value, 0);
+    const juros = txs.filter(t => t.type === 'juros').reduce((acc, curr) => acc + curr.value, 0);
+    const currentTotal = inv.initialValue + aportes + juros;
+
+    return [
+      inv.name,
+      format(parseISO(inv.date), 'dd/MM/yyyy'),
+      formatCurrency(inv.initialValue),
+      formatCurrency(aportes),
+      formatCurrency(juros),
+      formatCurrency(currentTotal)
+    ];
+  });
+
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 16,
+    head: [['Nome do Ativo', 'Data de Início', 'Valor Inicial', 'Aportes', 'Juros', 'Saldo Atual']],
+    body: assetsBody.length ? assetsBody : [['Sem ativos cadastrados', '-', '-', '-', '-', '-']],
+    theme: 'grid',
+    headStyles: { fillColor: [15, 23, 42] },
+    styles: { fontSize: 8.5 },
+  });
+
+  // 4. General Statement Table
+  doc.addPage();
+  doc.setFontSize(12);
+  doc.text('Histórico Geral de Movimentações (Extrato)', 14, 18);
+
+  const sortedTxs = [...investmentTransactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const transactionsBody = sortedTxs.map(tx => {
+    const inv = investments.find(i => i.id === tx.investmentId);
+    const invName = inv ? inv.name : 'Ativo removido';
+    return [
+      format(parseISO(tx.date), 'dd/MM/yyyy'),
+      invName,
+      tx.type === 'aporte' ? 'Aporte de Capital' : 'Rendimento (Juros)',
+      formatCurrency(tx.value)
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 22,
+    head: [['Data', 'Ativo', 'Tipo', 'Valor']],
+    body: transactionsBody.length ? transactionsBody : [['-', 'Nenhuma movimentação registrada', '-', '-']],
+    theme: 'grid',
+    headStyles: { fillColor: [15, 23, 42] },
+    styles: { fontSize: 8.5 },
+  });
+
+  const filename = `atlas-investimentos-${format(generatedAt, 'yyyy-MM-dd-HHmm')}.pdf`;
   doc.save(filename);
 
   // Save to notification history on the server asynchronously

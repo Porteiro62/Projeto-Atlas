@@ -40,6 +40,21 @@ export interface UserProfile {
   photoUrl: string | null;
 }
 
+export interface Investment {
+  id: string;
+  name: string;
+  initialValue: number;
+  date: string;
+}
+
+export interface InvestmentTransaction {
+  id: string;
+  investmentId: string;
+  type: 'aporte' | 'juros';
+  value: number;
+  date: string;
+}
+
 interface FinanceState {
   transactions: Transaction[];
   summary: Summary;
@@ -68,6 +83,14 @@ interface FinanceState {
   lockApp: () => Promise<void>;
   logout: () => void;
   setDate: (month: number, year: number) => void;
+  investments: Investment[];
+  investmentTransactions: InvestmentTransaction[];
+  fetchInvestments: () => Promise<void>;
+  fetchInvestmentTransactions: () => Promise<void>;
+  addInvestment: (inv: Omit<Investment, 'id'>) => Promise<void>;
+  deleteInvestment: (id: string) => Promise<void>;
+  addInvestmentTransaction: (tx: Omit<InvestmentTransaction, 'id'>) => Promise<void>;
+  deleteInvestmentTransaction: (id: string) => Promise<void>;
 }
 
 export const useFinanceStore = create<FinanceState>((set, get) => ({
@@ -80,6 +103,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   selectedMonth: new Date().getMonth(),
   selectedYear: new Date().getFullYear(),
   loading: false,
+  investments: [],
+  investmentTransactions: [],
 
   fetchTransactions: async () => {
     set({ loading: true });
@@ -271,6 +296,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
           get().fetchSummary(),
           get().fetchFinancingMeta(),
           get().fetchUserProfile(),
+          get().fetchInvestments(),
+          get().fetchInvestmentTransactions(),
         ]);
         return true;
       }
@@ -319,6 +346,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
           get().fetchSummary(),
           get().fetchFinancingMeta(),
           get().fetchUserProfile(),
+          get().fetchInvestments(),
+          get().fetchInvestmentTransactions(),
         ]);
         return true;
       }
@@ -373,6 +402,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
           get().fetchSummary(),
           get().fetchFinancingMeta(),
           get().fetchUserProfile(),
+          get().fetchInvestments(),
+          get().fetchInvestmentTransactions(),
         ]);
         return true;
       }
@@ -394,6 +425,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       transactions: [],
       summary: { income: 0, expense: 0, balance: 0 },
       financingMeta: { target: 0, initialValue: 0, monthlyInstallment: 0 },
+      investments: [],
+      investmentTransactions: [],
     });
   },
 
@@ -402,4 +435,59 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   },
 
   setDate: (month, year) => set({ selectedMonth: month, selectedYear: year }),
+
+  fetchInvestments: async () => {
+    const res = await fetch('/api/investments');
+    if (!res.ok) return;
+    const data = await res.json();
+    set({ investments: data });
+  },
+
+  fetchInvestmentTransactions: async () => {
+    const res = await fetch('/api/investments/transactions');
+    if (!res.ok) return;
+    const data = await res.json();
+    set({ investmentTransactions: data });
+  },
+
+  addInvestment: async (inv) => {
+    const res = await fetch('/api/investments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(inv),
+    });
+    if (res.ok) {
+      await get().fetchInvestments();
+    }
+  },
+
+  deleteInvestment: async (id) => {
+    const res = await fetch(`/api/investments/${id}`, {
+      method: 'DELETE',
+    });
+    if (res.ok) {
+      await get().fetchInvestments();
+      await get().fetchInvestmentTransactions();
+    }
+  },
+
+  addInvestmentTransaction: async (tx) => {
+    const res = await fetch('/api/investments/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tx),
+    });
+    if (res.ok) {
+      await get().fetchInvestmentTransactions();
+    }
+  },
+
+  deleteInvestmentTransaction: async (id) => {
+    const res = await fetch(`/api/investments/transactions/${id}`, {
+      method: 'DELETE',
+    });
+    if (res.ok) {
+      await get().fetchInvestmentTransactions();
+    }
+  },
 }));

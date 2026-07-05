@@ -37,7 +37,10 @@ export function TransactionForm({ onClose, initialType, initialData }: { onClose
     const value = currentValue;
     const dateStr = formData.get('date') as string;
     const recurrenceVal = formData.get('recurrence') as any || 'none';
-    const status = formData.get('status') as any || 'pending';
+    const todayStr = new Date().toISOString().split('T')[0];
+    const status = isEditing 
+      ? (formData.get('status') as any || 'pending')
+      : (dateStr <= todayStr ? 'paid' : 'pending');
     const observations = formData.get('observations') as string;
 
     if (isEditing && initialData) {
@@ -69,7 +72,7 @@ export function TransactionForm({ onClose, initialType, initialData }: { onClose
             value,
             date: format(currentDate, 'yyyy-MM-dd'),
             recurrence: 'none', 
-            status: i === 0 ? status : 'pending',
+            status: format(currentDate, 'yyyy-MM-dd') <= todayStr ? 'paid' : 'pending',
             observations,
             installmentNumber: i + 1,
             totalInstallments: installments
@@ -181,13 +184,15 @@ export function TransactionForm({ onClose, initialType, initialData }: { onClose
               </div>
             )}
 
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Status</label>
-              <select name="status" defaultValue={initialData?.status || 'pending'} className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-stone-900 text-sm focus:ring-1 focus:ring-atlas-emerald outline-none transition-all">
-                <option value="pending">Pendente</option>
-                <option value="paid">Confirmado</option>
-              </select>
-            </div>
+            {isEditing && (
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Status</label>
+                <select name="status" defaultValue={initialData?.status || 'pending'} className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-stone-900 text-sm focus:ring-1 focus:ring-atlas-emerald outline-none transition-all">
+                  <option value="pending">Pendente</option>
+                  <option value="paid">Confirmado</option>
+                </select>
+              </div>
+            )}
           </div>
 
           {!isEditing && recurrence === 'monthly' && (initialData?.type === 'financing' || initialType === 'financing') && (

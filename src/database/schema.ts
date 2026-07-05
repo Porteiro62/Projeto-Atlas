@@ -40,3 +40,18 @@ export const appSettings = sqliteTable('app_settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
 });
+
+export const investments = sqliteTable('investments', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  initialValue: real('initial_value').notNull(),
+  date: text('date').notNull(),
+});
+
+export const investmentTransactions = sqliteTable('investment_transactions', {
+  id: text('id').primaryKey(),
+  investmentId: text('investment_id').notNull(),
+  type: text('type', { enum: ['aporte', 'juros'] }).notNull(),
+  value: real('value').notNull(),
+  date: text('date').notNull(),
+});

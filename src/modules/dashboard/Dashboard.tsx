@@ -10,6 +10,7 @@ import {
   PieChart as PieChartIcon,
   Target,
   Home,
+  TrendingUp,
 } from 'lucide-react';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { FinancingMetaForm } from '../financing/FinancingMetaForm';
@@ -51,6 +52,10 @@ export function Dashboard() {
     fetchTransactions,
     fetchSummary,
     fetchFinancingMeta,
+    investments,
+    investmentTransactions,
+    fetchInvestments,
+    fetchInvestmentTransactions,
   } = useFinanceStore();
   const [isMetaFormOpen, setIsMetaFormOpen] = useState(false);
 
@@ -58,6 +63,8 @@ export function Dashboard() {
     fetchTransactions();
     fetchSummary();
     fetchFinancingMeta();
+    fetchInvestments();
+    fetchInvestmentTransactions();
   }, []);
 
   const changeMonth = (offset: number) => {
@@ -120,6 +127,34 @@ export function Dashboard() {
       };
     });
   }, [transactions, selectedYear]);
+
+  const investmentEvolutionSummary = useMemo(() => {
+    return Array.from({ length: 12 }, (_, index) => {
+      const lastDayOfMonth = new Date(selectedYear, index + 1, 0);
+      const lastDayStr = lastDayOfMonth.toISOString().split('T')[0];
+
+      let monthlyTotal = 0;
+
+      // Sum initial value of all investments started on or before the last day of this month
+      investments.forEach(inv => {
+        if (inv.date <= lastDayStr) {
+          monthlyTotal += inv.initialValue;
+        }
+      });
+
+      // Sum all transactions on or before the last day of this month
+      investmentTransactions.forEach(tx => {
+        if (tx.date <= lastDayStr) {
+          monthlyTotal += tx.value;
+        }
+      });
+
+      return {
+        label: format(new Date(selectedYear, index, 1), 'MMM/yyyy', { locale: ptBR }),
+        total: monthlyTotal,
+      };
+    });
+  }, [investments, investmentTransactions, selectedYear]);
 
   const annualTotalSummary = useMemo(() => {
     return annualSummary.reduce((acc, month) => {
@@ -310,6 +345,52 @@ export function Dashboard() {
               />
               <Area type="monotone" dataKey="income" stroke="#26d0a8" fill="url(#monthlyIncomeArea)" strokeWidth={3} />
               <Line type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+
+      <section className="bg-white border border-stone-200 rounded-3xl p-8 shadow-sm">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h3 className="text-sm font-bold text-stone-900 uppercase tracking-widest">Evolução dos Investimentos</h3>
+            <p className="text-xs text-stone-400 font-medium">Evolução mensal do saldo total acumulado em investimentos.</p>
+          </div>
+          <TrendingUp size={20} className="text-stone-300" />
+        </div>
+
+        <div className="h-[320px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={investmentEvolutionSummary}>
+              <defs>
+                <linearGradient id="monthlyInvestmentsArea" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.18} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis
+                dataKey="label"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
+              />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
+              />
+              <Tooltip
+                formatter={(value: number) => currencyFormatter.format(value)}
+                contentStyle={{
+                  backgroundColor: '#fff',
+                  borderRadius: '16px',
+                  border: '1px solid #e5e7eb',
+                  boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                  fontSize: '12px',
+                }}
+              />
+              <Area type="monotone" dataKey="total" stroke="#3b82f6" fill="url(#monthlyInvestmentsArea)" strokeWidth={3} name="Total Acumulado" />
             </ComposedChart>
           </ResponsiveContainer>
         </div>

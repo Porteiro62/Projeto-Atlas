@@ -10,6 +10,7 @@ import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './modules/dashboard/Dashboard';
 import { TransactionList } from './modules/transactions/TransactionList';
 import { FinancingModule } from './modules/financing/Financing';
+import { InvestmentsModule } from './modules/investments/Investments';
 import { ProfileSettings } from './modules/profile/ProfileSettings';
 import { LockScreen } from './modules/auth/LockScreen';
 import { SplashScreen } from './modules/auth/SplashScreen';
@@ -33,7 +34,7 @@ export default function App() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
   const [availableVersion, setAvailableVersion] = useState<string | null>(null);
-  const { user, isAuthenticated, checkAuthStatus, fetchFinancingMeta, fetchUserProfile, lockApp, transactions } = useFinanceStore();
+  const { user, isAuthenticated, checkAuthStatus, fetchFinancingMeta, fetchUserProfile, lockApp, transactions, fetchInvestments, fetchInvestmentTransactions } = useFinanceStore();
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [reports, setReports] = useState<ReportFile[]>([]);
@@ -160,7 +161,9 @@ export default function App() {
     if (!isAuthenticated) return;
     fetchFinancingMeta();
     fetchUserProfile();
-  }, [isAuthenticated, fetchFinancingMeta, fetchUserProfile]);
+    fetchInvestments();
+    fetchInvestmentTransactions();
+  }, [isAuthenticated, fetchFinancingMeta, fetchUserProfile, fetchInvestments, fetchInvestmentTransactions]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -244,6 +247,8 @@ export default function App() {
         return <TransactionList filterType="credit_card" />;
       case 'financing':
         return <FinancingModule />;
+      case 'investments':
+        return <InvestmentsModule />;
       default:
         return <Dashboard />;
     }

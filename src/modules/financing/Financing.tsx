@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useFinanceStore, Transaction } from '../../store/useFinanceStore';
-import { Home, Target, TrendingUp, Calendar, Plus, ChevronRight, PieChart, Activity, ChevronLeft, Edit2, Trash2, Download } from 'lucide-react';
+import { Home, TrendingUp, Calendar, Plus, ChevronRight, PieChart, Activity, ChevronLeft, Edit2, Trash2, Download } from 'lucide-react';
 import { TransactionForm } from '../transactions/TransactionForm';
 import { FinancingMetaForm } from './FinancingMetaForm';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -164,10 +164,6 @@ export function FinancingModule() {
         <div className="lg:col-span-2 space-y-6">
           {/* Main Card */}
           <div className="bg-white border border-stone-200 p-8 rounded-3xl relative overflow-hidden shadow-sm">
-             <div className="absolute top-0 right-0 p-8 opacity-5">
-               <Target size={150} />
-             </div>
-             
              <div className="flex items-center gap-3 mb-8 relative z-10">
               <div className="p-3 bg-stone-900 text-white rounded-2xl">
                 <Home size={24} />
